@@ -1,0 +1,49 @@
+__pycache__/
+*.py[cod]
+.env
+.env.*
+*.cookie
+*.cookies
+
+# Sensitive source and generated learning material.
+raw/
+cases/
+details/
+cases_extra/
+notes/
+reviews/
+db/
+index/
+rules/
+training/pilot.json
+training/15例训练手册.md
+docs/系统归纳.md
+backup/
+
+# Web app build output and local dependencies.
+web/node_modules/
+web/dist/
+web/*.log
+web/*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
+
+# Locally owned reference books stay outside version control.
+library/**/*.pdf
+library/**/*.epub
+library/**/*.mobi
+library/**/*.azw3
+
+# The public GitHub repository contains only the web shell. Keep the local
+# knowledge-building workspace and generated material off GitHub entirely.
+/.github/workflows/pages.yml
+/build/
+/docs/
+/library/
+/training/
+/requirements.txt
+/package.json
+/README.md
+/start_web.cmd
+/root_dev_test.log
+/start_web_test.log
