@@ -31,7 +31,7 @@ import {
 } from '@phosphor-icons/react'
 import { Badge, Button, Dialog, IconButton, TextArea, TextField, Theme } from '@radix-ui/themes'
 import { LocalStudyDatabase } from './sqlite'
-import { BRANCH_RELATION_GROUPS, HIDDEN_STEMS, NAYIN, RELATION_QUIZ_QUESTIONS, STEM_BASICS, STEM_RELATION_GROUPS, tenGodFor, type RelationGroup } from './foundations'
+import { BRANCH_RELATION_GROUPS, HIDDEN_STEMS, NAYIN, RELATION_QUIZ_QUESTIONS, STEM_BASICS, STEM_RELATION_GROUPS, detectChartRelations, tenGodFor, type RelationGroup } from './foundations'
 import { buildCaseQuiz } from './quiz'
 import { BOOK_GROUPS, REFERENCE_BOOKS, matchLocalBook, type BookGroup } from './library'
 import { TOPIC_WORKFLOWS } from './workflows'
@@ -496,7 +496,7 @@ function HomeView({ db, records }: { db: LocalStudyDatabase; records: LocalRecor
   return (
     <div className="page-stack">
       <section className="hero-panel">
-        <div><p className="eyebrow">今天学一点就够</p><h1>{nextCase ? reviewing ? '回看一组没有全对的题。' : '先做四道案例选择题。' : '全部可练案例已经完成。'}</h1><p>{nextCase ? `${nextCase.printed_label} · ${nextCase.title}` : '可以检索案例原文，或进入规则证据区复盘。'}</p></div>
+        <div><p className="eyebrow">今天学一点就够</p><h1>{nextCase ? reviewing ? '回看一组没有全对的题。' : '先做一组案例选择题。' : '全部可练案例已经完成。'}</h1><p>{nextCase ? `${nextCase.printed_label} · ${nextCase.title}` : '可以检索案例原文，或进入规则证据区复盘。'}</p></div>
         <Button size="3" onClick={() => nextCase ? go('quiz', nextCase.case_uid) : go('training')}><Brain size={19} />{nextCase ? reviewing ? '复习这一组' : '继续选择题' : '查看学习记录'}</Button>
       </section>
       <section className="stat-strip" aria-label="资料库概览">
@@ -572,13 +572,13 @@ function QuizCatalog({ db, records }: { db: LocalStudyDatabase; records: LocalRe
   const visibleCases = scopedCases.slice(0, visibleCount)
   useEffect(() => setVisibleCount(30), [scope, query])
 
-  return <section className="module-section quiz-catalog"><div className="module-heading"><div><GraduationCap size={24} /><div><h2>案例选择题库</h2><p>每例四题。{methodCaseCount} 例含方法标签，其余案例改问命盘月柱。</p></div></div><Badge color={completed === cases.length ? 'green' : 'gray'}>{completed}/{cases.length}</Badge></div>
+  return <section className="module-section quiz-catalog"><div className="module-heading"><div><GraduationCap size={24} /><div><h2>案例选择题库</h2><p>每例 4–5 题；命盘存在无歧义的干支关系时增加 1 题。{methodCaseCount} 例含方法标签，其余案例改问命盘月柱。</p></div></div><Badge color={completed === cases.length ? 'green' : 'gray'}>{completed}/{cases.length}</Badge></div>
     <div className="quiz-progress-strip"><div><strong>{starterIds.length}</strong><span>入门案例</span></div><div><strong>{completed}</strong><span>已完成</span></div><div><strong>{mastered}</strong><span>全部答对</span></div><div><strong>{reviewCount}</strong><span>需要复习</span></div></div>
     <div className="quiz-catalog-controls"><div className="quiz-scope-tabs"><button className={scope === 'starter' ? 'active' : ''} onClick={() => setScope('starter')}>入门 {starterIds.length} 例</button><button className={scope === 'all' ? 'active' : ''} onClick={() => setScope('all')}>全部 {cases.length} 例</button><button className={scope === 'review' ? 'active' : ''} onClick={() => setScope('review')}>待复习 {reviewCount}</button></div><label className="quiz-search"><MagnifyingGlass size={16} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索例号、标题或方法" /></label></div>
     {visibleCases.length ? <><div className="list-panel">{visibleCases.map((item, index) => {
       const result = results.get(item.case_uid)
       const displayIndex = scope === 'starter' ? (starterOrder.get(item.case_uid) || 0) + 1 : cases.indexOf(item) + 1
-      return <button className="list-row" key={item.case_uid} onClick={() => go('quiz', item.case_uid)}><span className={`row-index ${result?.completed ? 'complete' : ''}`}>{result?.completed ? <CheckCircle weight="fill" /> : String(displayIndex || index + 1).padStart(2, '0')}</span><span className="row-main"><strong>{item.printed_label} · {item.title}</strong><small>{result?.completed ? `上次得分 ${result.quizScore}/${result.quizTotal}` : '4 道基础选择题'}</small></span><Badge variant="soft" color={result?.completed && result.quizScore === result.quizTotal ? 'green' : 'gray'}>{result?.completed ? '可重做' : '未完成'}</Badge><span className="row-arrow">›</span></button>
+      return <button className="list-row" key={item.case_uid} onClick={() => go('quiz', item.case_uid)}><span className={`row-index ${result?.completed ? 'complete' : ''}`}>{result?.completed ? <CheckCircle weight="fill" /> : String(displayIndex || index + 1).padStart(2, '0')}</span><span className="row-main"><strong>{item.printed_label} · {item.title}</strong><small>{result?.completed ? `上次得分 ${result.quizScore}/${result.quizTotal}` : '4–5 道基础选择题'}</small></span><Badge variant="soft" color={result?.completed && result.quizScore === result.quizTotal ? 'green' : 'gray'}>{result?.completed ? '可重做' : '未完成'}</Badge><span className="row-arrow">›</span></button>
     })}</div>{visibleCount < scopedCases.length && <div className="load-more"><Button variant="soft" color="gray" onClick={() => setVisibleCount((count) => count + 30)}>再显示 {Math.min(30, scopedCases.length - visibleCount)} 例</Button></div>}</> : <div className="quiz-empty"><CheckCircle size={27} /><h3>{scope === 'review' ? '目前没有待复习题组' : '没有匹配的案例'}</h3><p>{scope === 'review' ? '答错的题组会自动出现在这里。' : '换一个关键词试试。'}</p></div>}
   </section>
 }
@@ -717,7 +717,7 @@ function QuizView({ db, caseUid, records, onSave }: { db: LocalStudyDatabase; ca
     }
   }
 
-  return <div className="page-stack detail-page quiz-page"><BackButton to="training" label="返回个人学习" /><section className="quiz-heading"><div><p className="eyebrow">{caseData.printed_label} · 基础选择题</p><h1>{caseData.title}</h1><p>已答 {answered}/{questions.length}，当前答对 {score} 题。题目使用本案例第一张完整命盘。</p></div><Badge color={complete ? 'green' : 'gray'}>{complete ? `${score}/${questions.length}` : '作答中'}</Badge></section><ChartSection charts={[chart]} />
+  return <div className="page-stack detail-page quiz-page"><BackButton to="training" label="返回个人学习" /><section className="quiz-heading"><div><p className="eyebrow">{caseData.printed_label} · 基础选择题</p><h1>{caseData.title}</h1><p>已答 {answered}/{questions.length}，当前答对 {score} 题。题目使用本案例第一张完整命盘。</p></div><Badge color={complete ? 'green' : 'gray'}>{complete ? `${score}/${questions.length}` : '作答中'}</Badge></section><ChartSection charts={[chart]} showRelations={complete} />
     <div className="quiz-questions">{questions.map((question, index) => {
       const selected = answers[question.id]
       return <section className={`quiz-question ${selected ? 'answered' : ''}`} key={question.id}><header><span>{index + 1}</span><h2>{question.prompt}</h2></header><div className="quiz-options">{question.options.map((option) => {
@@ -1029,9 +1029,12 @@ function CaseView({ db, caseUid, records, onSave, source }: { db: LocalStudyData
   </div>
 }
 
-function ChartSection({ charts, masked = false }: { charts: Chart[]; masked?: boolean }) {
+function ChartSection({ charts, masked = false, showRelations = true }: { charts: Chart[]; masked?: boolean; showRelations?: boolean }) {
   const chartTypeLabel = (type: string) => type === 'natal_bazi' ? '本命八字' : type === 'event_time' ? '时空八字' : type === 'liuren_time' ? '六壬时间盘' : type
-  return <section className="chart-section"><div className="section-heading"><div><p className="eyebrow">命盘</p><h2>{charts.length > 1 ? `${charts.length} 组四柱` : '四柱排布'}</h2></div>{masked && <Badge variant="soft" color="gray">其余资料已遮蔽</Badge>}</div><div className="chart-list">{charts.map((chart) => <div className="chart-board" key={chart.chart_id}><header><span>{chartTypeLabel(chart.chart_type)}</span>{chart.gender && <span>{chart.gender}</span>}</header><div className="pillars"><Pillar label="年" value={chart.year_pillar} /><Pillar label="月" value={chart.month_pillar} /><Pillar label="日" value={chart.day_pillar} active /><Pillar label="时" value={chart.hour_pillar} /></div></div>)}</div>{!charts.length && <p className="muted">本例未识别出完整四柱。</p>}</section>
+  return <section className="chart-section"><div className="section-heading"><div><p className="eyebrow">命盘</p><h2>{charts.length > 1 ? `${charts.length} 组四柱` : '四柱排布'}</h2></div>{masked && <Badge variant="soft" color="gray">其余资料已遮蔽</Badge>}</div><div className="chart-list">{charts.map((chart) => {
+    const relations = detectChartRelations(chart)
+    return <div className="chart-with-relations" key={chart.chart_id}><div className="chart-board"><header><span>{chartTypeLabel(chart.chart_type)}</span>{chart.gender && <span>{chart.gender}</span>}</header><div className="pillars"><Pillar label="年" value={chart.year_pillar} /><Pillar label="月" value={chart.month_pillar} /><Pillar label="日" value={chart.day_pillar} active /><Pillar label="时" value={chart.hour_pillar} /></div></div>{showRelations && relations.length > 0 && <details className="chart-relations"><summary><span>展开干支关系提示</span><small>{relations.length} 项基础关系</small><CaretDown size={15} /></summary><div>{relations.map((relation) => <article key={relation.id}><header><Badge variant="soft" color={relation.scope === '天干' ? 'orange' : 'gray'}>{relation.scope}</Badge><strong>{relation.type}</strong></header><p><b>{relation.members}</b>{relation.result && <span>{relation.result}</span>}</p><small>{relation.locations.join('、')}</small></article>)}</div><footer>这里只识别表内结构，不直接判断吉凶；同一对地支可能在不同关系表中重复出现。</footer></details>}</div>
+  })}</div>{!charts.length && <p className="muted">本例未识别出完整四柱。</p>}</section>
 }
 
 function Pillar({ label, value, active = false }: { label: string; value: string; active?: boolean }) {

@@ -250,6 +250,136 @@ export const RELATION_QUIZ_QUESTIONS: RelationQuizQuestion[] = [
   },
 ]
 
+export type ChartPillars = {
+  year_pillar: string
+  month_pillar: string
+  day_pillar: string
+  hour_pillar: string
+}
+
+export type DetectedRelation = {
+  id: string
+  scope: '天干' | '地支'
+  type: string
+  members: string
+  locations: string[]
+  result?: string
+  boundary: string
+}
+
+type SymbolPosition = {
+  index: number
+  stem: string
+  branch: string
+  stemLabel: string
+  branchLabel: string
+}
+
+const RELATION_TYPE_NAMES: Record<string, string> = {
+  'stem-combinations': '天干五合',
+  'stem-oppositions': '天干相克',
+  'branch-six-combinations': '地支六合',
+  'branch-three-combinations': '地支三合',
+  'branch-three-meetings': '地支三会',
+  'branch-six-clashes': '地支六冲',
+  'branch-punishments': '地支相刑',
+  'branch-six-harms': '地支六害（穿）',
+  'branch-six-breaks': '地支六破',
+}
+
+function chartPositions(chart: ChartPillars): SymbolPosition[] {
+  const pillars = [
+    ['年', chart.year_pillar],
+    ['月', chart.month_pillar],
+    ['日', chart.day_pillar],
+    ['时', chart.hour_pillar],
+  ] as const
+  return pillars.flatMap(([label, pillar], index) => pillar?.length === 2 ? [{
+    index,
+    stem: pillar[0],
+    branch: pillar[1],
+    stemLabel: `${label}干${pillar[0]}`,
+    branchLabel: `${label}支${pillar[1]}`,
+  }] : [])
+}
+
+function samePair(first: string, second: string, members: string[]) {
+  return members.length === 2 && ((first === members[0] && second === members[1]) || (first === members[1] && second === members[0]))
+}
+
+export function detectChartRelations(chart: ChartPillars): DetectedRelation[] {
+  const positions = chartPositions(chart)
+  const detected: DetectedRelation[] = []
+
+  function addPairGroups(scope: '天干' | '地支', groups: RelationGroup[]) {
+    const symbol = (position: SymbolPosition) => scope === '天干' ? position.stem : position.branch
+    const label = (position: SymbolPosition) => scope === '天干' ? position.stemLabel : position.branchLabel
+    for (const group of groups) {
+      for (const entry of group.entries) {
+        const members = entry.members.split('—')
+        if (members.length !== 2 || members.some((item) => item.includes('／'))) continue
+        for (let first = 0; first < positions.length; first += 1) {
+          for (let second = first + 1; second < positions.length; second += 1) {
+            if (!samePair(symbol(positions[first]), symbol(positions[second]), members)) continue
+            const locations = [label(positions[first]), label(positions[second])]
+            detected.push({
+              id: `${scope}-${group.id}-${locations.join('-')}`,
+              scope,
+              type: RELATION_TYPE_NAMES[group.id] || group.title,
+              members: entry.members,
+              locations,
+              result: entry.result,
+              boundary: group.boundary,
+            })
+          }
+        }
+      }
+    }
+  }
+
+  addPairGroups('天干', STEM_RELATION_GROUPS)
+  addPairGroups('地支', BRANCH_RELATION_GROUPS.filter((group) => ['branch-six-combinations', 'branch-six-clashes', 'branch-six-harms', 'branch-six-breaks'].includes(group.id)))
+
+  const punishmentGroup = BRANCH_RELATION_GROUPS.find((group) => group.id === 'branch-punishments')!
+  const ziMao = punishmentGroup.entries.find((entry) => entry.members === '子—卯')!
+  addPairGroups('地支', [{ ...punishmentGroup, entries: [ziMao] }])
+
+  for (const group of BRANCH_RELATION_GROUPS.filter((item) => ['branch-three-combinations', 'branch-three-meetings', 'branch-punishments'].includes(item.id))) {
+    for (const entry of group.entries) {
+      const members = entry.members.split('—')
+      if (members.length !== 3) continue
+      if (!members.every((member) => positions.some((position) => position.branch === member))) continue
+      const locations = positions.filter((position) => members.includes(position.branch)).map((position) => position.branchLabel)
+      detected.push({
+        id: `地支-${group.id}-${entry.members}`,
+        scope: '地支',
+        type: RELATION_TYPE_NAMES[group.id] || group.title,
+        members: entry.members,
+        locations,
+        result: entry.result,
+        boundary: group.boundary,
+      })
+    }
+  }
+
+  const selfPunishment = punishmentGroup.entries.find((entry) => entry.result === '自刑')!
+  for (const branch of ['辰', '午', '酉', '亥']) {
+    const matches = positions.filter((position) => position.branch === branch)
+    if (matches.length < 2) continue
+    detected.push({
+      id: `地支-${punishmentGroup.id}-${branch}-self`,
+      scope: '地支',
+      type: RELATION_TYPE_NAMES[punishmentGroup.id],
+      members: `${branch}—${branch}`,
+      locations: matches.map((position) => position.branchLabel),
+      result: '自刑',
+      boundary: selfPunishment ? punishmentGroup.boundary : '',
+    })
+  }
+
+  return detected
+}
+
 export const NAYIN: NayinEntry[] = [
   { pillars: ['甲子', '乙丑'], name: '海中金' },
   { pillars: ['丙寅', '丁卯'], name: '炉中火' },

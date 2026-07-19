@@ -1,4 +1,4 @@
-import { HIDDEN_STEMS, NAYIN, hiddenStemsFor, nayinFor } from './foundations'
+import { HIDDEN_STEMS, NAYIN, detectChartRelations, hiddenStemsFor, nayinFor } from './foundations'
 import { DAY_STEMS } from './search'
 import type { Chart } from './types'
 
@@ -33,6 +33,23 @@ export function buildCaseQuiz(caseUid: string, chart: Chart, methods: string[], 
   const hiddenPool = HIDDEN_STEMS.map((item) => item.stems.join('、'))
   const nayinPool = NAYIN.map((item) => item.name)
   const pillarPool = NAYIN.flatMap((item) => item.pillars)
+  const relations = detectChartRelations(chart)
+  const locationCounts = new Map<string, number>()
+  for (const relation of relations) {
+    const key = relation.locations.join('|')
+    locationCounts.set(key, (locationCounts.get(key) || 0) + 1)
+  }
+  const relation = relations
+    .filter((item) => locationCounts.get(item.locations.join('|')) === 1)
+    .sort((first, second) => hash(`${caseUid}:relation:${first.id}`) - hash(`${caseUid}:relation:${second.id}`))[0]
+  const relationTypes = ['天干五合', '天干相克', '地支六合', '地支三合', '地支三会', '地支六冲', '地支相刑', '地支六害（穿）', '地支六破']
+  const relationQuestions: QuizQuestion[] = relation ? [{
+    id: 'chart-relation',
+    prompt: `命盘中的${relation.locations.join('、')}（${relation.members}）属于哪种基础关系？`,
+    options: optionsFor(relation.type, relationTypes, `${caseUid}:relation-options`),
+    answer: relation.type,
+    explanation: `${relation.locations.join('、')}构成${relation.members}，基础表归为“${relation.type}”${relation.result ? `，传统配属为${relation.result}` : ''}。关系名称只用于识别结构，不能单独判断吉凶。`,
+  }] : []
 
   return [
     {
@@ -56,6 +73,7 @@ export function buildCaseQuiz(caseUid: string, chart: Chart, methods: string[], 
       answer: nayin,
       explanation: `六十甲子纳音表中，${chart.day_pillar}对应${nayin}。`,
     },
+    ...relationQuestions,
     methods.length ? {
       id: 'method',
       prompt: '以下哪一项被资料库标记为本案例的方法？',
