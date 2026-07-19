@@ -361,7 +361,7 @@ function AppShell(props: ShellProps) {
         <div className="page-frame">
           {route.name === 'home' && <HomeView db={db} records={records} />}
           {route.name === 'training' && <TrainingView db={db} records={records} route={route} />}
-          {route.name === 'quiz' && route.id && <QuizView db={db} caseUid={route.id} records={records} onSave={props.onSave} />}
+          {route.name === 'quiz' && route.id && <QuizView key={`${route.id}-${route.secondaryId || 'full'}`} db={db} caseUid={route.id} records={records} reviewWrong={route.secondaryId === 'wrong'} onSave={props.onSave} />}
           {route.name === 'training-card' && route.id && <TrainingCardView db={db} caseUid={route.id} records={records} onSave={props.onSave} />}
           {route.name === 'rules' && <RulesView db={db} />}
           {route.name === 'rule' && route.id && <RuleView db={db} ruleId={route.id} records={records} />}
@@ -601,7 +601,7 @@ function QuizCatalog({ db, records }: { db: LocalStudyDatabase; records: LocalRe
       const mistakeLabels = quizMistakeLabels(evaluation)
       const detail = evaluation?.complete ? mistakeLabels.length ? `得分 ${evaluation.score}/${evaluation.total} · 错项：${mistakeLabels.join('、')}` : `得分 ${evaluation.score}/${evaluation.total} · 全部答对` : evaluation?.answered ? `待完成 ${evaluation.answered}/${evaluation.total}，继续上次进度` : '4–5 道基础选择题'
       const badge = evaluation?.complete ? '可重做' : evaluation?.answered ? `待补 ${evaluation.total - evaluation.answered} 题` : '未完成'
-      return <button className="list-row" key={item.case_uid} onClick={() => go('quiz', item.case_uid)}><span className={`row-index ${evaluation?.complete ? 'complete' : ''}`}>{evaluation?.complete ? <CheckCircle weight="fill" /> : String(displayIndex || index + 1).padStart(2, '0')}</span><span className="row-main"><strong>{item.printed_label} · {item.title}</strong><small>{detail}</small></span><Badge variant="soft" color={evaluation?.complete && !mistakeLabels.length ? 'green' : 'gray'}>{badge}</Badge><span className="row-arrow">›</span></button>
+      return <button className="list-row" key={item.case_uid} onClick={() => go('quiz', item.case_uid, scope === 'review' ? 'wrong' : undefined)}><span className={`row-index ${evaluation?.complete ? 'complete' : ''}`}>{evaluation?.complete ? <CheckCircle weight="fill" /> : String(displayIndex || index + 1).padStart(2, '0')}</span><span className="row-main"><strong>{item.printed_label} · {item.title}</strong><small>{detail}</small></span><Badge variant="soft" color={evaluation?.complete && !mistakeLabels.length ? 'green' : 'gray'}>{scope === 'review' ? '重做错题' : badge}</Badge><span className="row-arrow">›</span></button>
     })}</div>{visibleCount < scopedCases.length && <div className="load-more"><Button variant="soft" color="gray" onClick={() => setVisibleCount((count) => count + 30)}>再显示 {Math.min(30, scopedCases.length - visibleCount)} 例</Button></div>}</> : <div className="quiz-empty"><CheckCircle size={27} /><h3>{scope === 'review' ? '目前没有待复习题组' : '没有匹配的案例'}</h3><p>{scope === 'review' ? '答错的题组会自动出现在这里。' : '换一个关键词试试。'}</p></div>}
   </section>
 }
@@ -720,21 +720,44 @@ function AdvancedTrainingList({ db, records }: { db: LocalStudyDatabase; records
   )
 }
 
-function QuizView({ db, caseUid, records, onSave }: { db: LocalStudyDatabase; caseUid: string; records: LocalRecord[]; onSave: (record: LocalRecord) => Promise<void> }) {
+function QuizView({ db, caseUid, records, reviewWrong = false, onSave }: { db: LocalStudyDatabase; caseUid: string; records: LocalRecord[]; reviewWrong?: boolean; onSave: (record: LocalRecord) => Promise<void> }) {
   const caseData = db.query<CaseDetail>('SELECT * FROM cases WHERE case_uid=?', [caseUid])[0]
   const chart = db.query<Chart>('SELECT * FROM charts WHERE case_uid=? AND length(day_pillar)=2 ORDER BY chart_index LIMIT 1', [caseUid])[0]
   const methods = splitTags(caseData?.methods || '')
   const methodPool = db.query<{ tag: string }>("SELECT tag FROM tags WHERE kind='method' GROUP BY tag ORDER BY COUNT(*) DESC").map((item) => item.tag)
   const existing = records.find((record) => record.id === recordId('quiz', caseUid))
-  const [answers, setAnswers] = useState<Record<string, string>>(() => parseQuizAnswers(existing?.body))
+  const questions = caseData && chart ? buildCaseQuiz(caseUid, chart, methods, methodPool) : []
+  const storedAnswers = parseQuizAnswers(existing?.body)
+  const storedWrongIds = questions.filter((question) => storedAnswers[question.id] && storedAnswers[question.id] !== question.answer).map((question) => question.id)
+  const [focusQuestionIds, setFocusQuestionIds] = useState<string[]>(() => reviewWrong ? storedWrongIds : [])
+  const [answers, setAnswers] = useState<Record<string, string>>(() => reviewWrong ? Object.fromEntries(Object.entries(storedAnswers).filter(([id]) => !storedWrongIds.includes(id))) : storedAnswers)
   if (!caseData || !chart) return <NotFound />
-  const questions = buildCaseQuiz(caseUid, chart, methods, methodPool)
   const answered = Object.keys(answers).filter((id) => questions.some((question) => question.id === id)).length
   const score = questions.filter((question) => answers[question.id] === question.answer).length
   const complete = answered === questions.length
+  const displayQuestions = focusQuestionIds.length ? questions.filter((question) => focusQuestionIds.includes(question.id)) : questions
+  const focusAnswered = displayQuestions.filter((question) => Boolean(answers[question.id])).length
   const wrongQuestions = questions.filter((question) => answers[question.id] && answers[question.id] !== question.answer)
   const wrongLabels = [...new Set(wrongQuestions.map((question) => quizSkillFor(question.id).label))]
   const foundationSkill = wrongQuestions.map((question) => quizSkillFor(question.id)).find((skill) => 'foundationFocus' in skill)
+
+  function scrollToQuizTop() {
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' }))
+  }
+
+  function retryWrongQuestions() {
+    const ids = wrongQuestions.map((question) => question.id)
+    if (!ids.length) return
+    setFocusQuestionIds(ids)
+    setAnswers((current) => Object.fromEntries(Object.entries(current).filter(([id]) => !ids.includes(id))))
+    scrollToQuizTop()
+  }
+
+  function restartAll() {
+    setFocusQuestionIds([])
+    setAnswers({})
+    scrollToQuizTop()
+  }
 
   async function choose(questionId: string, option: string) {
     if (answers[questionId]) return
@@ -746,15 +769,15 @@ function QuizView({ db, caseUid, records, onSave }: { db: LocalStudyDatabase; ca
     }
   }
 
-  return <div className="page-stack detail-page quiz-page"><BackButton to="training" label="返回个人学习" /><section className="quiz-heading"><div><p className="eyebrow">{caseData.printed_label} · 基础选择题</p><h1>{caseData.title}</h1><p>已答 {answered}/{questions.length}，当前答对 {score} 题。题目使用本案例第一张完整命盘。</p></div><Badge color={complete ? 'green' : 'gray'}>{complete ? `${score}/${questions.length}` : '作答中'}</Badge></section><ChartSection charts={[chart]} showRelations={complete} showLearningHints={complete} />
-    <div className="quiz-questions">{questions.map((question, index) => {
+  return <div className="page-stack detail-page quiz-page"><BackButton to="training" label="返回个人学习" /><section className="quiz-heading"><div><p className="eyebrow">{caseData.printed_label} · {focusQuestionIds.length ? '错题重做' : '基础选择题'}</p><h1>{caseData.title}</h1><p>{focusQuestionIds.length ? `只重做上次的 ${displayQuestions.length} 个错项，已答 ${focusAnswered}/${displayQuestions.length}。` : `已答 ${answered}/${questions.length}，当前答对 ${score} 题。`}题目使用本案例第一张完整命盘。</p></div><Badge color={complete ? 'green' : 'gray'}>{complete ? `${score}/${questions.length}` : focusQuestionIds.length ? '错题重做' : '作答中'}</Badge></section><ChartSection charts={[chart]} showRelations={complete} showLearningHints={complete} />
+    <div className="quiz-questions">{displayQuestions.map((question, index) => {
       const selected = answers[question.id]
       return <section className={`quiz-question ${selected ? 'answered' : ''}`} key={question.id}><header><span>{index + 1}</span><h2>{question.prompt}</h2></header><div className="quiz-options">{question.options.map((option) => {
         const state = selected ? option === question.answer ? 'correct' : option === selected ? 'wrong' : '' : ''
         return <button className={state} key={option} disabled={Boolean(selected)} onClick={() => choose(question.id, option)}><span>{option}</span>{state === 'correct' && <Check size={18} weight="bold" />}{state === 'wrong' && <X size={18} weight="bold" />}</button>
       })}</div>{selected && <p className={`quiz-explanation ${selected === question.answer ? 'correct' : 'wrong'}`}>{selected === question.answer ? '答对了。' : `正确答案：${question.answer}。`}{question.explanation}</p>}</section>
     })}</div>
-    {complete && <section className="quiz-complete"><CheckCircle size={28} weight="fill" /><div><h2>本组完成：{score}/{questions.length}</h2><p>{wrongLabels.length ? `本次需回看：${wrongLabels.join('、')}。先补基础，再阅读原文观察作者如何使用这些信息。` : '基础事实已全部答对。下一步阅读原文，观察作者如何把这些信息接入判断。'}</p></div><div className="button-row">{foundationSkill && 'foundationFocus' in foundationSkill && <Button onClick={() => go('training', 'foundations', foundationSkill.foundationFocus)}><Table size={16} />回看{foundationSkill.label}</Button>}<Button variant={foundationSkill ? 'soft' : 'solid'} color={foundationSkill ? 'gray' : undefined} onClick={() => go('case', caseUid)}>阅读案例原文</Button><Button variant="soft" color="gray" onClick={() => setAnswers({})}>重新作答</Button><Button variant="ghost" color="gray" onClick={() => go('training')}>返回题目列表</Button></div></section>}
+    {complete && <section className="quiz-complete"><CheckCircle size={28} weight="fill" /><div><h2>本组完成：{score}/{questions.length}</h2><p>{wrongLabels.length ? `本次需回看：${wrongLabels.join('、')}。可以只重做错题，也可以先补基础再回到本例。` : '基础事实已全部答对。下一步阅读原文，观察作者如何把这些信息接入判断。'}</p></div><div className="button-row">{wrongQuestions.length > 0 && <Button onClick={retryWrongQuestions}>只重做 {wrongQuestions.length} 道错题</Button>}{foundationSkill && 'foundationFocus' in foundationSkill && <Button variant="soft" color="gray" onClick={() => go('training', 'foundations', foundationSkill.foundationFocus)}><Table size={16} />回看{foundationSkill.label}</Button>}<Button variant={wrongQuestions.length ? 'soft' : 'solid'} color={wrongQuestions.length ? 'gray' : undefined} onClick={() => go('case', caseUid)}>阅读案例原文</Button><Button variant="ghost" color="gray" onClick={restartAll}>全部重做</Button>{!wrongQuestions.length && <Button variant="ghost" color="gray" onClick={() => go('training')}>返回题目列表</Button>}</div></section>}
   </div>
 }
 
