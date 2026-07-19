@@ -2,7 +2,7 @@ import type { LocalRecord, LocalRecordKind } from './types'
 
 export const BACKUP_FORMAT = 'linzhonggui-notes'
 const LEGACY_BACKUP_FORMAT = 'zhou-study-notes'
-const RECORD_KINDS = new Set<LocalRecordKind>(['case', 'training', 'quiz', 'blind', 'practice'])
+const RECORD_KINDS = new Set<LocalRecordKind>(['case', 'training', 'quiz', 'blind', 'practice', 'foundation'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

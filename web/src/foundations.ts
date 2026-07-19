@@ -36,6 +36,19 @@ export type RelationQuizQuestion = {
   explanation: string
 }
 
+export type FoundationQuizCategory = 'hidden' | 'nayin' | 'relations'
+
+export type FoundationQuizQuestion = RelationQuizQuestion & {
+  categoryId: FoundationQuizCategory
+}
+
+export type FoundationQuizGroup = {
+  id: FoundationQuizCategory
+  title: string
+  description: string
+  questions: FoundationQuizQuestion[]
+}
+
 export const STEM_BASICS: StemBasic[] = [
   { stem: '甲', element: '木', polarity: '阳' },
   { stem: '乙', element: '木', polarity: '阴' },
@@ -428,6 +441,107 @@ export function hiddenStemsFor(branchOrPillar: string) {
 
 export function nayinFor(pillar: string) {
   return NAYIN.find((item) => item.pillars.includes(pillar))?.name || ''
+}
+
+function rotatedOptions(answer: string, pool: string[], index: number) {
+  const alternatives = pool.filter((item) => item !== answer)
+  const selected = [answer]
+  for (const offset of [1, 7, 13]) {
+    const candidate = alternatives[(index + offset) % alternatives.length]
+    if (candidate && !selected.includes(candidate)) selected.push(candidate)
+  }
+  for (const candidate of alternatives) {
+    if (selected.length === 4) break
+    if (!selected.includes(candidate)) selected.push(candidate)
+  }
+  const shift = index % selected.length
+  return [...selected.slice(shift), ...selected.slice(0, shift)]
+}
+
+const hiddenStemAnswers = HIDDEN_STEMS.map((item) => item.stems.join('、'))
+const nayinAnswers = NAYIN.map((item) => item.name)
+
+export const FOUNDATION_QUIZ_GROUPS: FoundationQuizGroup[] = [
+  {
+    id: 'hidden',
+    title: '地支藏干',
+    description: '十二地支逐一辨认本气、中气与余气。',
+    questions: HIDDEN_STEMS.map((item, index) => {
+      const answer = item.stems.join('、')
+      return {
+        id: `hidden-${item.branch}`,
+        categoryId: 'hidden',
+        category: '地支藏干',
+        prompt: `${item.branch}支所藏天干，以下哪一组正确？`,
+        options: rotatedOptions(answer, hiddenStemAnswers, index),
+        answer,
+        explanation: `${item.branch}藏${answer}；顺序按本气、中气、余气排列。`,
+      }
+    }),
+  },
+  {
+    id: 'nayin',
+    title: '六十甲子纳音',
+    description: '每两个干支一组，练熟三十组纳音名称。',
+    questions: NAYIN.map((item, index) => ({
+      id: `nayin-${item.pillars[0]}`,
+      categoryId: 'nayin',
+      category: '甲子纳音',
+      prompt: `${item.pillars.join('、')}的纳音是什么？`,
+      options: rotatedOptions(item.name, nayinAnswers, index),
+      answer: item.name,
+      explanation: `${item.pillars.join('、')}同属${item.name}。纳音先作基础识记，不单独推出吉凶。`,
+    })),
+  },
+  {
+    id: 'relations',
+    title: '地支关系',
+    description: '练习合、会、冲、刑、害（穿）、破及判断边界。',
+    questions: RELATION_QUIZ_QUESTIONS.filter((item) => item.id.startsWith('branch-') || item.id === 'relation-boundary').map((item) => ({
+      ...item,
+      categoryId: 'relations',
+    })),
+  },
+]
+
+export const FOUNDATION_QUIZ_QUESTIONS = FOUNDATION_QUIZ_GROUPS.flatMap((group) => group.questions)
+
+export type MajorShenshaHit = {
+  name: string
+  basis: string
+}
+
+const DAY_STEM_BRANCH_STARS: Record<string, Array<[string, string]>> = {
+  甲: [['天乙', '丑未'], ['文昌', '巳'], ['禄神', '寅'], ['羊刃', '卯']],
+  乙: [['天乙', '子申'], ['文昌', '午'], ['禄神', '卯'], ['羊刃', '寅']],
+  丙: [['天乙', '亥酉'], ['文昌', '申'], ['禄神', '巳'], ['羊刃', '午']],
+  丁: [['天乙', '亥酉'], ['文昌', '酉'], ['禄神', '午'], ['羊刃', '巳']],
+  戊: [['天乙', '丑未'], ['文昌', '申'], ['禄神', '巳'], ['羊刃', '午']],
+  己: [['天乙', '子申'], ['文昌', '酉'], ['禄神', '午'], ['羊刃', '巳']],
+  庚: [['天乙', '丑未'], ['文昌', '亥'], ['禄神', '申'], ['羊刃', '酉']],
+  辛: [['天乙', '午寅'], ['文昌', '子'], ['禄神', '酉'], ['羊刃', '申']],
+  壬: [['天乙', '巳卯'], ['文昌', '寅'], ['禄神', '亥'], ['羊刃', '子']],
+  癸: [['天乙', '巳卯'], ['文昌', '卯'], ['禄神', '子'], ['羊刃', '亥']],
+}
+
+const DAY_BRANCH_GROUP_STARS: Array<{ members: string; stars: Array<[string, string]> }> = [
+  { members: '申子辰', stars: [['驿马', '寅'], ['桃花', '酉'], ['华盖', '辰']] },
+  { members: '寅午戌', stars: [['驿马', '申'], ['桃花', '卯'], ['华盖', '戌']] },
+  { members: '亥卯未', stars: [['驿马', '巳'], ['桃花', '子'], ['华盖', '未']] },
+  { members: '巳酉丑', stars: [['驿马', '亥'], ['桃花', '午'], ['华盖', '丑']] },
+]
+
+export function majorShenshaFor(dayStem: string, dayBranch: string, targetBranch: string): MajorShenshaHit[] {
+  if (!targetBranch) return []
+  const hits: MajorShenshaHit[] = []
+  for (const [name, branches] of DAY_STEM_BRANCH_STARS[dayStem] || []) {
+    if (branches.includes(targetBranch)) hits.push({ name, basis: '日干起' })
+  }
+  const group = DAY_BRANCH_GROUP_STARS.find((item) => item.members.includes(dayBranch))
+  for (const [name, branch] of group?.stars || []) {
+    if (branch === targetBranch) hits.push({ name, basis: '日支起' })
+  }
+  return hits
 }
 
 export function tenGodFor(dayStem: string, otherStem: string) {

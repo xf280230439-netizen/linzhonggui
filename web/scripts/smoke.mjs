@@ -40,6 +40,20 @@ async function putRecord(page, record) {
   }), record)
 }
 
+async function waitForRecord(page, id) {
+  await page.waitForFunction((recordId) => new Promise((resolve) => {
+    const request = indexedDB.open('zhou-study-local', 1)
+    request.onsuccess = () => {
+      const db = request.result
+      const transaction = db.transaction('records', 'readonly')
+      const getRequest = transaction.objectStore('records').get(recordId)
+      getRequest.onsuccess = () => { db.close(); resolve(Boolean(getRequest.result)) }
+      getRequest.onerror = () => { db.close(); resolve(false) }
+    }
+    request.onerror = () => resolve(false)
+  }), id)
+}
+
 const preview = spawn(process.execPath, [viteCli, 'preview', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
   cwd: projectRoot,
   stdio: 'ignore',
@@ -61,6 +75,35 @@ try {
   await page.locator('.chart-foundations').waitFor()
   assert(await page.locator('.chart-foundations').count() === 1, '普通案例应显示基础拆解。')
   assert(await page.locator('.chart-relations').count() === 1, '普通案例应显示关系提示。')
+  assert(await page.locator('.pillars.dense .pillar-facts').count() === 4, '普通案例四柱应显示每柱十神、藏干、纳音和神煞。')
+  assert(await page.locator('.case-sticky-tools').count() === 1, '案例返回操作应保持吸顶可用。')
+  const note = page.locator('.case-note-dock textarea')
+  await note.fill('smoke floating note')
+  await waitForRecord(page, 'case:Z001')
+
+  await page.goto(`${base}#/training/basics/hidden`)
+  await page.locator('.foundation-quiz-question').waitFor()
+  assert(await page.locator('.relation-options button').count() === 4, '基础选择题应提供四个选项。')
+  await page.locator('.relation-options button').first().click()
+  await page.locator('.relation-explanation').waitFor()
+  await waitForRecord(page, 'foundation:quiz')
+  await page.reload()
+  await page.locator('.foundation-quiz-session > header strong').waitFor()
+  assert((await page.locator('.foundation-quiz-session > header strong').innerText()).includes('1 / 12'), '基础选择题刷新后应续接下一道未答题。')
+
+  await page.goto(`${base}#/cases`)
+  await page.locator('.smart-search-row input').fill('婚姻')
+  await page.locator('.filter-disclosure summary').click()
+  await page.locator('.filter-group').first().getByRole('button', { name: '甲', exact: true }).click()
+  const filteredCount = await page.locator('.case-card').count()
+  assert(filteredCount > 0, '组合检索应存在测试案例。')
+  await page.locator('.case-card').first().click()
+  await page.locator('.case-hero').waitFor()
+  await page.locator('.case-sticky-tools .back-button').click()
+  await page.locator('.smart-search-row input').waitFor()
+  assert(await page.locator('.smart-search-row input').inputValue() === '婚姻', '从案例返回后应恢复自然条件。')
+  await page.locator('.filter-disclosure summary').click()
+  assert(await page.locator('.filter-group').first().getByRole('button', { name: '甲', exact: true }).getAttribute('class') === 'active', '从案例返回后应恢复结构化筛选。')
 
   await page.goto(`${base}#/training-card/Z001`)
   await page.locator('.chart-board').waitFor()
@@ -119,6 +162,12 @@ try {
   await page.locator('button[aria-label="打开设置"]').click()
   const settings = page.locator('[role="dialog"]')
   await settings.waitFor()
+  await settings.getByRole('button', { name: '暗色' }).click()
+  assert((await page.locator('[data-is-root-theme="true"]').getAttribute('class')).includes('theme-dark'), '暗色主题应立即生效。')
+  await settings.getByRole('button', { name: '明亮' }).click()
+  assert((await page.locator('[data-is-root-theme="true"]').getAttribute('class')).includes('theme-light'), '明亮主题应立即生效。')
+  await settings.getByRole('button', { name: '护眼' }).click()
+  assert((await page.locator('[data-is-root-theme="true"]').getAttribute('class')).includes('theme-sepia'), '护眼主题应立即生效。')
   const backupInput = settings.locator('input[accept*="json"]')
   await backupInput.setInputFiles({
     name: 'legacy-backup.json',
@@ -149,6 +198,8 @@ try {
   const routeChecks = [
     ['#/home', '.hero-panel'],
     ['#/training/quiz', '.quiz-catalog'],
+    ['#/training/basics', '.foundation-quiz-library'],
+    ['#/training/basics/nayin', '.foundation-quiz-session'],
     ['#/training/foundations', '.foundation-stack'],
     ['#/training/workflows/marriage', '.workflow-reference'],
     ['#/training/advanced', '.advanced-training'],
@@ -183,15 +234,25 @@ try {
   assert(cachedLocalUrls.length === 0, `Service Worker 不应缓存本地数据库或书籍：${cachedLocalUrls.join(', ')}`)
 
   await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto(`${base}#/case/Z001`)
+  await page.locator('.mobile-note-toggle').click()
+  await page.waitForTimeout(200)
+  assert(await page.locator('.case-note-dock.open').count() === 1, '手机端应能打开边看边记抽屉。')
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-  assert(overflow === 0, `移动端横向溢出 ${overflow}px。`)
+  const overflowingElements = overflow ? await page.evaluate(() => [...document.querySelectorAll('*')].map((element) => {
+    const rect = element.getBoundingClientRect()
+    return { tag: element.tagName, className: element.className?.toString?.() || '', left: Math.round(rect.left), right: Math.round(rect.right), width: Math.round(rect.width) }
+  }).filter((item) => item.right > window.innerWidth + 1 || item.left < -1).slice(0, 12)) : []
+  assert(overflow === 0, `移动端横向溢出 ${overflow}px：${JSON.stringify(overflowingElements)}`)
   assert(errors.length === 0, `浏览器错误：${errors.join(' | ')}`)
 
   console.log('PASS  database auto-load')
   console.log('PASS  normal chart hints, masked training, and due-review boundary')
+  console.log('PASS  foundation quiz persistence, dense chart, floating notes, and search restoration')
   console.log('PASS  legacy 4/5 progress migration')
   console.log('PASS  direct mistake-only retry')
   console.log('PASS  backup export, legacy import, and malformed-record rejection')
+  console.log('PASS  light, dark, and eye-care themes')
   console.log('PASS  all primary, learning, practice, and rule routes')
   console.log('PASS  service worker keeps local data out of Cache Storage')
   console.log('PASS  390px mobile layout and browser console')

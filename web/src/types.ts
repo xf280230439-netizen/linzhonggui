@@ -14,7 +14,7 @@ export type DatabaseAsset = {
   bytes: ArrayBuffer
 }
 
-export type LocalRecordKind = 'case' | 'training' | 'quiz' | 'blind' | 'practice'
+export type LocalRecordKind = 'case' | 'training' | 'quiz' | 'blind' | 'practice' | 'foundation'
 
 export type LocalRecord = {
   id: string

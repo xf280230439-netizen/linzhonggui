@@ -18,6 +18,7 @@ import {
   GearSix,
   GraduationCap,
   House,
+  Eye,
   ListChecks,
   MagnifyingGlass,
   Moon,
@@ -31,7 +32,7 @@ import {
 } from '@phosphor-icons/react'
 import { Badge, Button, Dialog, IconButton, TextArea, TextField, Theme } from '@radix-ui/themes'
 import { LocalStudyDatabase } from './sqlite'
-import { BRANCH_RELATION_GROUPS, HIDDEN_STEMS, NAYIN, RELATION_QUIZ_QUESTIONS, STEM_BASICS, STEM_RELATION_GROUPS, detectChartRelations, summarizeChartFoundations, tenGodFor, type RelationGroup } from './foundations'
+import { BRANCH_RELATION_GROUPS, FOUNDATION_QUIZ_GROUPS, FOUNDATION_QUIZ_QUESTIONS, HIDDEN_STEMS, NAYIN, RELATION_QUIZ_QUESTIONS, STEM_BASICS, STEM_RELATION_GROUPS, detectChartRelations, hiddenStemsFor, majorShenshaFor, nayinFor, summarizeChartFoundations, tenGodFor, type FoundationQuizCategory, type RelationGroup } from './foundations'
 import { buildCaseQuiz } from './quiz'
 import { QUIZ_SKILLS, evaluateQuizCases, parseQuizAnswers, quizMistakeLabels, quizSkillFor } from './quiz-progress'
 import { parseRecordsBackup, serializeRecordsBackup } from './backup'
@@ -70,6 +71,46 @@ const navItems: Array<{ name: RouteName; label: string; icon: typeof House }> = 
   { name: 'library', label: '书架', icon: Books },
 ]
 
+type ThemeMode = 'light' | 'dark' | 'sepia'
+
+const CASE_SEARCH_STATE_KEY = 'linzhonggui-case-search'
+
+type PersistedCaseSearch = {
+  query: string
+  filters: SmartFilters
+  scrollY: number
+}
+
+function emptySmartFilters(): SmartFilters {
+  return { ...EMPTY_FILTERS, dayStems: [], dayPillars: [], topics: [], methods: [], views: [] }
+}
+
+function readCaseSearchState(): PersistedCaseSearch | undefined {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(CASE_SEARCH_STATE_KEY) || '') as Partial<PersistedCaseSearch>
+    if (typeof parsed.query !== 'string' || !parsed.filters || typeof parsed.filters !== 'object') return undefined
+    const filters = parsed.filters as Partial<SmartFilters>
+    return {
+      query: parsed.query,
+      filters: {
+        dayStems: Array.isArray(filters.dayStems) ? filters.dayStems.map(String) : [],
+        dayPillars: Array.isArray(filters.dayPillars) ? filters.dayPillars.map(String) : [],
+        gender: ['', '男', '女', '未标注'].includes(filters.gender || '') ? filters.gender as SmartFilters['gender'] : '',
+        topics: Array.isArray(filters.topics) ? filters.topics.map(String) : [],
+        methods: Array.isArray(filters.methods) ? filters.methods.map(String) : [],
+        views: Array.isArray(filters.views) ? filters.views.filter((item): item is SmartFilters['views'][number] => ['feedback', 'failure', 'timing'].includes(item)) : [],
+      },
+      scrollY: typeof parsed.scrollY === 'number' && Number.isFinite(parsed.scrollY) ? parsed.scrollY : 0,
+    }
+  } catch {
+    return undefined
+  }
+}
+
+function writeCaseSearchState(state: PersistedCaseSearch) {
+  sessionStorage.setItem(CASE_SEARCH_STATE_KEY, JSON.stringify(state))
+}
+
 function parseRoute(): Route {
   const parts = window.location.hash.replace(/^#\/?/, '').split('/').filter(Boolean)
   const name = (parts[0] || 'home') as RouteName
@@ -84,7 +125,7 @@ function go(name: RouteName, id?: string, secondaryId?: string) {
 
 function goToSavedTraining() {
   const savedMode = localStorage.getItem('zhou-training-mode') || 'quiz'
-  const validMode = ['quiz', 'foundations', 'workflows', 'advanced'].includes(savedMode) ? savedMode : 'quiz'
+  const validMode = ['quiz', 'basics', 'foundations', 'workflows', 'advanced'].includes(savedMode) ? savedMode : 'quiz'
   const workflowId = localStorage.getItem('zhou-workflow-id') || TOPIC_WORKFLOWS[0].id
   go('training', validMode, validMode === 'workflows' ? workflowId : undefined)
 }
@@ -149,17 +190,10 @@ function App() {
   const [records, setRecords] = useState<LocalRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() =>
-    (localStorage.getItem('zhou-theme') as 'light' | 'dark' | 'system') || 'system',
-  )
-  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
-
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const onChange = () => setSystemDark(media.matches)
-    media.addEventListener('change', onChange)
-    return () => media.removeEventListener('change', onChange)
-  }, [])
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    const stored = localStorage.getItem('zhou-theme')
+    return stored === 'light' || stored === 'dark' || stored === 'sepia' ? stored : 'sepia'
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -249,14 +283,14 @@ function App() {
     setDb(null)
   }
 
-  const appearance = themeMode === 'system' ? (systemDark ? 'dark' : 'light') : themeMode
-  function changeTheme(mode: 'light' | 'dark' | 'system') {
+  const appearance = themeMode === 'dark' ? 'dark' : 'light'
+  function changeTheme(mode: ThemeMode) {
     localStorage.setItem('zhou-theme', mode)
     setThemeMode(mode)
   }
 
   return (
-    <Theme appearance={appearance} accentColor="red" grayColor="slate" radius="medium" scaling="100%">
+    <Theme className={`theme-${themeMode}`} appearance={appearance} accentColor="red" grayColor="slate" radius="medium" scaling="100%">
       {loading && !db ? <LoadingScreen /> : db && asset ? (
         <AppShell
           route={route}
@@ -306,7 +340,7 @@ function Onboarding({ loading, error, onImport, onLoadProject }: { loading: bool
   return (
     <main className="onboarding">
       <section className="onboarding-copy">
-        <div className="seal">周</div>
+        <div className="seal">研</div>
         <p className="eyebrow">本地优先的案例学习工具</p>
         <h1>把 128 例，读成自己的判断力。</h1>
         <p className="lead">案例、规则证据、训练卡与笔记在同一个界面里。数据库只进入当前浏览器，不经过服务器。</p>
@@ -332,8 +366,8 @@ type ShellProps = {
   db: LocalStudyDatabase
   asset: DatabaseAsset
   records: LocalRecord[]
-  themeMode: 'light' | 'dark' | 'system'
-  onTheme: (mode: 'light' | 'dark' | 'system') => void
+  themeMode: ThemeMode
+  onTheme: (mode: ThemeMode) => void
   onImport: (file: File) => void
   onClear: () => void
   onSave: (record: LocalRecord) => Promise<void>
@@ -348,7 +382,7 @@ function AppShell(props: ShellProps) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <button className="brand" onClick={() => go('home')}><span>周</span><span><strong>周氏案研</strong><small>CASE STUDY</small></span></button>
+        <button className="brand" onClick={() => go('home')}><span>研</span><span><strong>实战研究</strong><small>CASE RESEARCH</small></span></button>
         <nav aria-label="主导航">
           {navItems.map((item) => <NavButton key={item.name} item={item} active={activeName === item.name} />)}
         </nav>
@@ -356,19 +390,19 @@ function AppShell(props: ShellProps) {
       </aside>
       <main className="main-area">
         <header className="topbar">
-          <div><p className="eyebrow">周氏十年断命学习库</p><strong>{pageTitle(route)}</strong></div>
+          <div><p className="eyebrow">八字案例实战研究</p><strong>{pageTitle(route)}</strong></div>
           <SettingsDialog {...props} />
         </header>
         <div className="page-frame">
           {route.name === 'home' && <HomeView db={db} records={records} />}
-          {route.name === 'training' && <TrainingView db={db} records={records} route={route} />}
+          {route.name === 'training' && <TrainingView db={db} records={records} route={route} onSave={props.onSave} />}
           {route.name === 'quiz' && route.id && <QuizView key={`${route.id}-${route.secondaryId || 'full'}`} db={db} caseUid={route.id} records={records} reviewWrong={route.secondaryId === 'wrong'} onSave={props.onSave} />}
           {route.name === 'training-card' && route.id && <TrainingCardView db={db} caseUid={route.id} records={records} onSave={props.onSave} />}
           {route.name === 'rules' && <RulesView db={db} />}
           {route.name === 'rule' && route.id && <RuleView db={db} ruleId={route.id} records={records} />}
           {route.name === 'blind' && route.id && route.secondaryId && <BlindView db={db} ruleId={route.id} caseUid={route.secondaryId} records={records} onSave={props.onSave} />}
-          {route.name === 'cases' && <CasesView db={db} records={records} initialWorkflowId={route.id === 'workflow' ? route.secondaryId : undefined} />}
-          {route.name === 'case' && route.id && <CaseView db={db} caseUid={route.id} records={records} onSave={props.onSave} source={route.secondaryId} />}
+          {route.name === 'cases' && <CasesView key={route.id === 'workflow' ? route.secondaryId : 'search'} db={db} records={records} initialWorkflowId={route.id === 'workflow' ? route.secondaryId : undefined} />}
+          {route.name === 'case' && route.id && <CaseView key={route.id} db={db} caseUid={route.id} records={records} onSave={props.onSave} source={route.secondaryId} />}
           {route.name === 'practice' && route.id && <PracticeView key={`${route.id}-${route.secondaryId || 'latest'}`} db={db} caseUid={route.id} attemptId={route.secondaryId || 'latest'} records={records} onSave={props.onSave} />}
           {route.name === 'library' && <LibraryView />}
         </div>
@@ -443,9 +477,9 @@ function SettingsDialog(props: ShellProps) {
         <div className="settings-section">
           <h3>外观</h3>
           <div className="segmented">
-            <button className={props.themeMode === 'light' ? 'active' : ''} onClick={() => props.onTheme('light')}><Sun size={16} />浅色</button>
-            <button className={props.themeMode === 'dark' ? 'active' : ''} onClick={() => props.onTheme('dark')}><Moon size={16} />深色</button>
-            <button className={props.themeMode === 'system' ? 'active' : ''} onClick={() => props.onTheme('system')}>跟随系统</button>
+            <button className={props.themeMode === 'light' ? 'active' : ''} onClick={() => props.onTheme('light')}><Sun size={16} />明亮</button>
+            <button className={props.themeMode === 'dark' ? 'active' : ''} onClick={() => props.onTheme('dark')}><Moon size={16} />暗色</button>
+            <button className={props.themeMode === 'sepia' ? 'active' : ''} onClick={() => props.onTheme('sepia')}><Eye size={16} />护眼</button>
           </div>
         </div>
         <Dialog.Close><Button variant="soft" color="gray" className="dialog-close">完成</Button></Dialog.Close>
@@ -512,8 +546,8 @@ function HomeView({ db, records }: { db: LocalStudyDatabase; records: LocalRecor
         <Stat value="9" label="干支关系组" />
       </section>
       <section className="section-block learning-path">
-        <div><h2>推荐学习顺序</h2><p>先认天干、十神、藏干、纳音与干支关系，再从十四例入门题进入专题步骤和盲练。</p></div>
-        <ol><li><span>基础</span><strong>干支、十神与关系表</strong></li><li><span>入门</span><strong>十四例选择题</strong></li><li><span>步骤</span><strong>专题步骤与盲练</strong></li><li><span>对照</span><strong>全部案例与原文</strong></li></ol>
+        <div><h2>推荐学习顺序</h2><p>先用选择题认藏干、纳音与地支关系，再从十四例入门题进入专题步骤和盲练。</p></div>
+        <ol><li><span>基础</span><strong>基础选择题与速查表</strong></li><li><span>入门</span><strong>十四例选择题</strong></li><li><span>步骤</span><strong>专题步骤与盲练</strong></li><li><span>对照</span><strong>全部案例与原文</strong></li></ol>
         <div className="button-row"><Button onClick={() => go('training')}>进入学习</Button><Button variant="soft" color="gray" onClick={() => go('library')}>打开参考书架</Button></div>
       </section>
       <section className="advanced-entry">
@@ -527,10 +561,10 @@ function Stat({ value, label }: { value: string; label: string }) {
   return <div><strong>{value}</strong><span>{label}</span></div>
 }
 
-function TrainingView({ db, records, route }: { db: LocalStudyDatabase; records: LocalRecord[]; route: Route }) {
-  type TrainingMode = 'quiz' | 'foundations' | 'workflows' | 'advanced'
+function TrainingView({ db, records, route, onSave }: { db: LocalStudyDatabase; records: LocalRecord[]; route: Route; onSave: (record: LocalRecord) => Promise<void> }) {
+  type TrainingMode = 'quiz' | 'basics' | 'foundations' | 'workflows' | 'advanced'
   const savedMode = localStorage.getItem('zhou-training-mode') as TrainingMode | null
-  const mode: TrainingMode = (['quiz', 'foundations', 'workflows', 'advanced'] as TrainingMode[]).includes(route.id as TrainingMode) ? route.id as TrainingMode : savedMode || 'quiz'
+  const mode: TrainingMode = (['quiz', 'basics', 'foundations', 'workflows', 'advanced'] as TrainingMode[]).includes(route.id as TrainingMode) ? route.id as TrainingMode : savedMode && ['quiz', 'basics', 'foundations', 'workflows', 'advanced'].includes(savedMode) ? savedMode : 'quiz'
   const savedWorkflowId = localStorage.getItem('zhou-workflow-id') || TOPIC_WORKFLOWS[0].id
   const workflowId = TOPIC_WORKFLOWS.some((item) => item.id === route.secondaryId) ? route.secondaryId! : savedWorkflowId
   useEffect(() => {
@@ -542,13 +576,84 @@ function TrainingView({ db, records, route }: { db: LocalStudyDatabase; records:
     go('training', next, next === 'workflows' ? workflowId : undefined)
   }
   return <div className="page-stack learning-page">
-    <PageIntro eyebrow="个人学习" title="从会认盘开始，不急着断命。" body="先完成十四例入门题，再按专题学习步骤、盲练和复盘。例117缺少完整命盘，只保留在深度训练中。" />
-    <nav className="learning-mode-tabs" aria-label="学习模式"><button className={mode === 'quiz' ? 'active' : ''} onClick={() => selectMode('quiz')}><CheckCircle size={18} />案例选择题</button><button className={mode === 'foundations' ? 'active' : ''} onClick={() => selectMode('foundations')}><Table size={18} />基础表</button><button className={mode === 'workflows' ? 'active' : ''} onClick={() => selectMode('workflows')}><ListChecks size={18} />专题步骤</button><button className={mode === 'advanced' ? 'active' : ''} onClick={() => selectMode('advanced')}><Brain size={18} />深度训练</button></nav>
+    <PageIntro eyebrow="个人学习" title="从会认盘开始，不急着断命。" body="可先用基础选择题熟悉藏干、纳音和地支关系，再做十四例入门题，之后进入专题步骤、盲练和复盘。例117缺少完整命盘，只保留在深度训练中。" />
+    <nav className="learning-mode-tabs" aria-label="学习模式"><button className={mode === 'quiz' ? 'active' : ''} onClick={() => selectMode('quiz')}><CheckCircle size={18} />案例选择题</button><button className={mode === 'basics' ? 'active' : ''} onClick={() => selectMode('basics')}><Brain size={18} />基础选择题</button><button className={mode === 'foundations' ? 'active' : ''} onClick={() => selectMode('foundations')}><Table size={18} />基础表</button><button className={mode === 'workflows' ? 'active' : ''} onClick={() => selectMode('workflows')}><ListChecks size={18} />专题步骤</button><button className={mode === 'advanced' ? 'active' : ''} onClick={() => selectMode('advanced')}><Flask size={18} />深度训练</button></nav>
     {mode === 'quiz' && <QuizCatalog db={db} records={records} />}
+    {mode === 'basics' && <FoundationQuizLibrary key={route.secondaryId || 'overview'} records={records} categoryId={route.secondaryId as FoundationQuizCategory | undefined} onSave={onSave} />}
     {mode === 'foundations' && <FoundationReference db={db} focus={route.secondaryId} />}
     {mode === 'workflows' && <WorkflowReference db={db} records={records} selectedId={workflowId} onSelect={(id) => { localStorage.setItem('zhou-workflow-id', id); go('training', 'workflows', id) }} />}
     {mode === 'advanced' && <AdvancedTrainingList db={db} records={records} />}
   </div>
+}
+
+function FoundationQuizLibrary({ records, categoryId, onSave }: { records: LocalRecord[]; categoryId?: FoundationQuizCategory; onSave: (record: LocalRecord) => Promise<void> }) {
+  const existing = records.find((item) => item.kind === 'foundation' && item.id === 'foundation:quiz')
+  const [answers, setAnswers] = useState<Record<string, string>>(() => parseQuizAnswers(existing?.body))
+  const group = FOUNDATION_QUIZ_GROUPS.find((item) => item.id === categoryId)
+  const initialIndex = group?.questions.findIndex((question) => !answers[question.id]) ?? -1
+  const [questionIndex, setQuestionIndex] = useState(initialIndex >= 0 ? initialIndex : 0)
+  const [showResult, setShowResult] = useState(() => Boolean(group && group.questions.every((question) => answers[question.id])))
+
+  const answeredCount = FOUNDATION_QUIZ_QUESTIONS.filter((question) => answers[question.id]).length
+  const correctCount = FOUNDATION_QUIZ_QUESTIONS.filter((question) => answers[question.id] === question.answer).length
+
+  async function persist(nextAnswers: Record<string, string>) {
+    const answered = FOUNDATION_QUIZ_QUESTIONS.filter((question) => nextAnswers[question.id]).length
+    const correct = FOUNDATION_QUIZ_QUESTIONS.filter((question) => nextAnswers[question.id] === question.answer).length
+    await onSave({
+      id: 'foundation:quiz',
+      kind: 'foundation',
+      caseUid: 'FOUNDATION',
+      body: JSON.stringify(nextAnswers),
+      completed: answered === FOUNDATION_QUIZ_QUESTIONS.length,
+      quizScore: correct,
+      quizTotal: FOUNDATION_QUIZ_QUESTIONS.length,
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  async function choose(questionId: string, option: string) {
+    if (answers[questionId]) return
+    const nextAnswers = { ...answers, [questionId]: option }
+    setAnswers(nextAnswers)
+    await persist(nextAnswers)
+  }
+
+  async function resetGroup(target: typeof FOUNDATION_QUIZ_GROUPS[number]) {
+    if (!window.confirm(`清除“${target.title}”的作答记录并重新练习吗？`)) return
+    const ids = new Set(target.questions.map((question) => question.id))
+    const nextAnswers = Object.fromEntries(Object.entries(answers).filter(([id]) => !ids.has(id)))
+    setAnswers(nextAnswers)
+    setQuestionIndex(0)
+    setShowResult(false)
+    await persist(nextAnswers)
+  }
+
+  if (!group) return <section className="foundation-quiz-library"><header><div><p className="eyebrow">基础选择题库</p><h2>把需要背的，拆成 51 次轻量辨认。</h2><p>每次只做一道，答完立即看到依据。作答记录保存在本机，藏干、纳音和地支关系可以分开练。</p></div><div className="foundation-quiz-total"><strong>{answeredCount}</strong><span>已答 / {FOUNDATION_QUIZ_QUESTIONS.length}</span><small>答对 {correctCount}</small></div></header><div className="foundation-quiz-groups">{FOUNDATION_QUIZ_GROUPS.map((item) => {
+    const answered = item.questions.filter((question) => answers[question.id]).length
+    const correct = item.questions.filter((question) => answers[question.id] === question.answer).length
+    return <button key={item.id} onClick={() => go('training', 'basics', item.id)}><span>{String(item.questions.length).padStart(2, '0')}</span><div><h3>{item.title}</h3><p>{item.description}</p><small>{answered ? `已答 ${answered} · 答对 ${correct}` : '尚未开始'}</small></div><ArrowRight size={18} /></button>
+  })}</div></section>
+
+  const groupAnswered = group.questions.filter((question) => answers[question.id]).length
+  const groupCorrect = group.questions.filter((question) => answers[question.id] === question.answer).length
+  const groupComplete = groupAnswered === group.questions.length
+  const question = group.questions[questionIndex]
+  const selected = question ? answers[question.id] : ''
+
+  if (groupComplete && showResult) return <section className="foundation-quiz-library foundation-quiz-complete"><button className="back-button" onClick={() => go('training', 'basics')}><ArrowLeft size={17} />返回基础题库</button><div><CheckCircle size={38} weight="fill" /><p className="eyebrow">本类已完成</p><h2>{group.title}</h2><strong>{groupCorrect} / {group.questions.length}</strong><p>可返回题库换一类，也可以清除本类记录重新练习。</p><div className="button-row"><Button onClick={() => go('training', 'basics')}>返回题库</Button><Button variant="soft" color="gray" onClick={() => resetGroup(group)}>重做本类</Button></div></div></section>
+
+  return <section className="foundation-quiz-library foundation-quiz-session"><header><button className="back-button" onClick={() => go('training', 'basics')}><ArrowLeft size={17} />返回基础题库</button><div><span>{group.title}</span><strong>{groupAnswered} / {group.questions.length}</strong></div></header><div className="foundation-quiz-question"><Badge variant="soft" color="gray">{question.category}</Badge><h2>{question.prompt}</h2><div className="relation-options">{question.options.map((option) => {
+    const correct = Boolean(selected) && option === question.answer
+    const wrong = selected === option && option !== question.answer
+    return <button className={correct ? 'correct' : wrong ? 'wrong' : ''} disabled={Boolean(selected)} key={option} onClick={() => choose(question.id, option)}><span>{option}</span>{correct ? <Check size={18} weight="bold" /> : wrong ? <X size={18} weight="bold" /> : null}</button>
+  })}</div>{selected && <div className={`relation-explanation ${selected === question.answer ? 'correct' : 'wrong'}`}><strong>{selected === question.answer ? '答对了' : `正确答案：${question.answer}`}</strong><p>{question.explanation}</p><Button size="1" onClick={() => {
+    const nextUnanswered = group.questions.findIndex((item, index) => index > questionIndex && !answers[item.id])
+    const anyUnanswered = group.questions.findIndex((item) => !answers[item.id])
+    if (nextUnanswered >= 0) setQuestionIndex(nextUnanswered)
+    else if (anyUnanswered >= 0) setQuestionIndex(anyUnanswered)
+    else setShowResult(true)
+  }}>{groupComplete ? '查看结果' : '下一题'}<ArrowRight size={14} /></Button></div>}</div></section>
 }
 
 function QuizCatalog({ db, records }: { db: LocalStudyDatabase; records: LocalRecord[] }) {
@@ -917,8 +1022,9 @@ function BlindView({ db, ruleId, caseUid, records, onSave }: { db: LocalStudyDat
 
 function CasesView({ db, records, initialWorkflowId }: { db: LocalStudyDatabase; records: LocalRecord[]; initialWorkflowId?: string }) {
   const workflowContext = TOPIC_WORKFLOWS.find((item) => item.id === initialWorkflowId)
-  const [query, setQuery] = useState('')
-  const [filters, setFilters] = useState<SmartFilters>({ ...EMPTY_FILTERS, dayStems: [], dayPillars: [], topics: workflowContext ? [workflowContext.topic] : [], methods: [], views: [] })
+  const initialSearch = useRef(workflowContext ? undefined : readCaseSearchState())
+  const [query, setQuery] = useState(() => initialSearch.current?.query || '')
+  const [filters, setFilters] = useState<SmartFilters>(() => workflowContext ? { ...emptySmartFilters(), topics: [workflowContext.topic] } : initialSearch.current?.filters || emptySmartFilters())
   const cases = db.query<CaseSearchDocument>('SELECT section_index, case_uid, printed_label, title, gender, day_stem, day_pillar, chart_count, topics, methods, has_detail, body, detail FROM cases ORDER BY section_index')
   const topics = db.query<{ tag: string }>("SELECT tag FROM tags WHERE kind='topic' GROUP BY tag ORDER BY COUNT(*) DESC, tag").map((row) => row.tag)
   const methods = db.query<{ tag: string }>("SELECT tag FROM tags WHERE kind='method' GROUP BY tag ORDER BY COUNT(*) DESC, tag").map((row) => row.tag)
@@ -928,9 +1034,23 @@ function CasesView({ db, records, initialWorkflowId }: { db: LocalStudyDatabase;
   const activeCount = filters.dayStems.length + filters.dayPillars.length + filters.topics.length + filters.methods.length + filters.views.length + (filters.gender ? 1 : 0)
   const hasCriteria = Boolean(query.trim() || activeCount)
   useEffect(() => {
+    if (!workflowContext) return
     setQuery('')
-    setFilters({ ...EMPTY_FILTERS, dayStems: [], dayPillars: [], topics: workflowContext ? [workflowContext.topic] : [], methods: [], views: [] })
-  }, [initialWorkflowId])
+    setFilters({ ...emptySmartFilters(), topics: [workflowContext.topic] })
+  }, [workflowContext?.id])
+
+  useEffect(() => {
+    if (workflowContext) return
+    const saved = readCaseSearchState()
+    writeCaseSearchState({ query, filters, scrollY: saved?.scrollY || 0 })
+  }, [query, filters, workflowContext?.id])
+
+  useEffect(() => {
+    if (workflowContext || !initialSearch.current?.scrollY) return
+    const target = initialSearch.current.scrollY
+    const timer = window.setTimeout(() => window.scrollTo({ top: target, behavior: 'auto' }), 60)
+    return () => window.clearTimeout(timer)
+  }, [workflowContext?.id])
 
   function toggleFilter(key: 'dayStems' | 'topics' | 'methods' | 'views', value: string) {
     setFilters((current) => {
@@ -941,7 +1061,13 @@ function CasesView({ db, records, initialWorkflowId }: { db: LocalStudyDatabase;
 
   function clearSearch() {
     setQuery('')
-    setFilters({ ...EMPTY_FILTERS, dayStems: [], dayPillars: [], topics: [], methods: [], views: [] })
+    setFilters(emptySmartFilters())
+    if (!workflowContext) writeCaseSearchState({ query: '', filters: emptySmartFilters(), scrollY: 0 })
+  }
+
+  function openCase(caseUid: string) {
+    if (!workflowContext) writeCaseSearchState({ query, filters, scrollY: window.scrollY })
+    go('case', caseUid, workflowContext ? `workflow-${workflowContext.id}` : 'search')
   }
 
   function beginPractice(caseUid?: string) {
@@ -983,7 +1109,7 @@ function CasesView({ db, records, initialWorkflowId }: { db: LocalStudyDatabase;
     </section>
 
     <div className="search-result-heading"><div><strong>{matches.length}</strong><span>个匹配案例</span>{hasCriteria && <small>组合条件同时满足</small>}</div>{hasCriteria && <Button size="1" variant="ghost" color="gray" onClick={clearSearch}>清除全部条件</Button>}</div>
-    <div className="case-grid">{matches.map(({ item, reasons }) => <button className="case-card" key={item.case_uid} onClick={() => go('case', item.case_uid, workflowContext ? `workflow-${workflowContext.id}` : undefined)}><header><span>{item.printed_label}</span><small>{item.day_pillar || '日柱未识别'}</small></header><h2>{item.title}</h2>{hasCriteria ? <div className="match-reasons">{reasons.map((reason) => <span key={reason}>{reason}</span>)}</div> : <div className="tag-line">{splitTags(item.topics).slice(0, 3).map((tag) => <Badge key={tag} variant="soft" color="gray">{tag}</Badge>)}</div>}<footer><span>{item.gender ? `${item.gender}命` : '性别未标注'}</span><span>{item.has_detail ? '含论坛补充' : `${item.chart_count} 盘`}</span></footer></button>)}</div>
+    <div className="case-grid">{matches.map(({ item, reasons }) => <button className="case-card" key={item.case_uid} onClick={() => openCase(item.case_uid)}><header><span>{item.printed_label}</span><small>{item.day_pillar || '日柱未识别'}</small></header><h2>{item.title}</h2>{hasCriteria ? <div className="match-reasons">{reasons.map((reason) => <span key={reason}>{reason}</span>)}</div> : <div className="tag-line">{splitTags(item.topics).slice(0, 3).map((tag) => <Badge key={tag} variant="soft" color="gray">{tag}</Badge>)}</div>}<footer><span>{item.gender ? `${item.gender}命` : '性别未标注'}</span><span>{item.has_detail ? '含论坛补充' : `${item.chart_count} 盘`}</span></footer></button>)}</div>
     {!matches.length && <EmptyState title="组合条件没有命中" body="系统没有放宽条件。可以移除一个主题、方法或学习视图后再试。" />}
   </div>
 }
@@ -1059,7 +1185,16 @@ function CaseView({ db, caseUid, records, onSave, source }: { db: LocalStudyData
   const [note, setNote] = useState(existing?.body || '')
   const [saved, setSaved] = useState(false)
   const [scheduled, setScheduled] = useState(existing?.nextReviewAt || '')
+  const [noteOpen, setNoteOpen] = useState(false)
   const sourceWorkflow = source?.startsWith('workflow-') ? TOPIC_WORKFLOWS.find((item) => item.id === source.slice('workflow-'.length)) : undefined
+  useEffect(() => {
+    if (note === (existing?.body || '')) return
+    const timer = window.setTimeout(async () => {
+      await onSave({ ...existing, id: recordId('case', caseUid), kind: 'case', caseUid, body: note, completed: Boolean(note.trim()), updatedAt: new Date().toISOString() })
+      setSaved(true)
+    }, 900)
+    return () => window.clearTimeout(timer)
+  }, [note, existing?.body, caseUid, onSave])
   if (!data) return <NotFound />
   async function saveNote() {
     await onSave({ ...existing, id: recordId('case', caseUid), kind: 'case', caseUid, body: note, completed: Boolean(note.trim()), updatedAt: new Date().toISOString() })
@@ -1072,13 +1207,13 @@ function CaseView({ db, caseUid, records, onSave, source }: { db: LocalStudyData
     setScheduled(next)
     setSaved(true)
   }
-  return <div className="page-stack detail-page"><BackButton to={sourceWorkflow ? 'training' : 'cases'} id={sourceWorkflow ? 'workflows' : undefined} secondaryId={sourceWorkflow?.id} label={sourceWorkflow ? `返回${sourceWorkflow.title}` : '返回案例文库'} />
+  const notePanel = <aside className={`case-note-dock ${noteOpen ? 'open' : ''}`} aria-label="案头笔记"><header><div><p className="eyebrow">我的案头笔记</p><h2>边看边记</h2></div><IconButton className="note-dock-close" variant="ghost" color="gray" aria-label="关闭笔记" title="关闭笔记" onClick={() => setNoteOpen(false)}><X size={18} /></IconButton></header><TextArea resize="vertical" size="3" value={note} onChange={(event) => { setNote(event.target.value); setSaved(false) }} onBlur={() => { if (note !== (existing?.body || '')) void saveNote() }} placeholder="我的判断、与原文的差异、仍不理解之处……" /><div className="editor-actions"><small>{saved || note === (existing?.body || '') ? '已保存在本机' : '停止输入后自动保存'}</small><Button size="1" onClick={saveNote}>立即保存</Button></div><details className="note-review-settings"><summary><span><CalendarCheck size={16} />安排间隔复习</span><CaretDown size={15} /></summary><div className="review-decision compact"><div><p>{scheduled ? `当前计划：${new Date(scheduled).toLocaleDateString('zh-CN')}` : '按掌握度安排下次复习。'}</p></div><div>{REVIEW_LEVELS.map((level) => <button key={level.confidence} onClick={() => scheduleReview(level.confidence)}><strong>{level.confidence}</strong><span>{level.label}</span><small>{level.days}天</small></button>)}</div></div></details></aside>
+
+  return <div className="page-stack detail-page case-workspace"><div className="case-sticky-tools"><BackButton to={sourceWorkflow ? 'training' : 'cases'} id={sourceWorkflow ? 'workflows' : undefined} secondaryId={sourceWorkflow?.id} label={sourceWorkflow ? `返回${sourceWorkflow.title}` : '返回案例文库'} /><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>回到顶部</button></div>
     <section className="case-hero"><div><span>{data.printed_label}</span><span>{data.case_uid}</span>{data.gender && <span>{data.gender}</span>}</div><h1>{data.title}</h1><div className="tag-line">{splitTags(data.topics).map((tag) => <Badge key={tag} variant="soft" color="gray">{tag}</Badge>)}</div></section>
     <ChartSection charts={charts} />
-    {evidence.length > 0 && <section className="rule-links"><p className="eyebrow">关联规则证据</p><div>{evidence.map((item) => <button key={item.rule_id} onClick={() => go('rule', item.rule_id)}><strong>{item.rule_id}</strong><Badge color={relationColor(item.relation)}>{item.relation_name}</Badge></button>)}</div></section>}
-    <SourceText title="案例原文" text={data.body} />
-    {data.detail && <SourceText title="论坛补充" text={data.detail} />}
-    <section className="section-block note-editor"><div className="section-heading"><div><p className="eyebrow">我的案头笔记</p><h2>把看懂，变成能复述</h2></div><NotePencil size={24} /></div><TextArea resize="vertical" size="3" value={note} onChange={(e) => { setNote(e.target.value); setSaved(false) }} placeholder="我的判断、与原文的差异、仍不理解之处……" /><div className="editor-actions"><small>{saved ? '已保存在本机' : '未上传到任何服务器'}</small><Button onClick={saveNote}>保存笔记</Button></div><div className="review-decision compact"><div><h3>安排间隔复习</h3><p>{scheduled ? `当前计划：${new Date(scheduled).toLocaleDateString('zh-CN')}` : '按掌握度安排下一次复习，记录会进入智能检索页的到期队列。'}</p></div><div>{REVIEW_LEVELS.map((level) => <button key={level.confidence} onClick={() => scheduleReview(level.confidence)}><strong>{level.confidence}</strong><span>{level.label}</span><small>{level.days}天后</small></button>)}</div></div></section>
+    <div className="case-reading-layout"><div className="case-reading-flow">{evidence.length > 0 && <section className="rule-links"><p className="eyebrow">关联规则证据</p><div>{evidence.map((item) => <button key={item.rule_id} onClick={() => go('rule', item.rule_id)}><strong>{item.rule_id}</strong><Badge color={relationColor(item.relation)}>{item.relation_name}</Badge></button>)}</div></section>}<SourceText title="案例原文" text={data.body} />{data.detail && <SourceText title="论坛补充" text={data.detail} />}</div>{notePanel}</div>
+    <button className="mobile-note-toggle" aria-expanded={noteOpen} onClick={() => setNoteOpen((open) => !open)}><NotePencil size={19} weight="fill" />{noteOpen ? '关闭笔记' : '边看边记'}</button>
   </div>
 }
 
@@ -1089,12 +1224,16 @@ function ChartSection({ charts, masked = false, showRelations, showLearningHints
   return <section className="chart-section"><div className="section-heading"><div><p className="eyebrow">命盘</p><h2>{charts.length > 1 ? `${charts.length} 组四柱` : '四柱排布'}</h2></div>{masked && <Badge variant="soft" color="gray">其余资料已遮蔽</Badge>}</div><div className="chart-list">{charts.map((chart) => {
     const relations = detectChartRelations(chart)
     const foundations = summarizeChartFoundations(chart)
-    return <div className="chart-with-relations" key={chart.chart_id}><div className="chart-board"><header><span>{chartTypeLabel(chart.chart_type)}</span>{chart.gender && <span>{chart.gender}</span>}</header><div className="pillars"><Pillar label="年" value={chart.year_pillar} /><Pillar label="月" value={chart.month_pillar} /><Pillar label="日" value={chart.day_pillar} active /><Pillar label="时" value={chart.hour_pillar} /></div></div>{learningHintsVisible && foundations.dayMaster.stem && <details className="chart-foundations"><summary><span>展开基础拆解</span><small>日主 · 藏干 · 纳音 · 明透十神</small><CaretDown size={15} /></summary><div className="chart-foundation-grid"><article><small>日主</small><strong>{foundations.dayMaster.stem}</strong><span>{foundations.dayMaster.polarity}{foundations.dayMaster.element}</span></article><article><small>月支藏干</small><strong>{foundations.monthBranch.branch}</strong><span>{foundations.monthBranch.hiddenStems.join('、')}</span></article><article><small>日支藏干</small><strong>{foundations.dayBranch.branch}</strong><span>{foundations.dayBranch.hiddenStems.join('、')}</span></article><article><small>日柱纳音</small><strong>{foundations.dayNayin}</strong><span>{chart.day_pillar}</span></article></div><div className="visible-ten-gods"><small>明透天干相对日主</small><div>{foundations.visibleTenGods.map((item) => <span key={item.position}><b>{item.position}{item.stem}</b><em>{item.tenGod}</em></span>)}</div></div><footer>这里只拆解可直接核对的基础事实；十神名称不等于旺衰、喜忌或事件结论。</footer></details>}{relationHintsVisible && relations.length > 0 && <details className="chart-relations"><summary><span>展开干支关系提示</span><small>{relations.length} 项基础关系</small><CaretDown size={15} /></summary><div>{relations.map((relation) => <article key={relation.id}><header><Badge variant="soft" color={relation.scope === '天干' ? 'orange' : 'gray'}>{relation.scope}</Badge><strong>{relation.type}</strong></header><p><b>{relation.members}</b>{relation.result && <span>{relation.result}</span>}</p><small>{relation.locations.join('、')}</small></article>)}</div><footer>这里只识别表内结构，不直接判断吉凶；同一对地支可能在不同关系表中重复出现。</footer></details>}</div>
+    return <div className="chart-with-relations" key={chart.chart_id}><div className="chart-board"><header><span>{chartTypeLabel(chart.chart_type)}</span><span>{learningHintsVisible ? `${chart.gender ? `${chart.gender} · ` : ''}四柱基础事实 · 常用神煞` : chart.gender || ''}</span></header><div className={`pillars ${learningHintsVisible ? 'dense' : ''}`}><Pillar label="年" value={chart.year_pillar} dayStem={chart.day_pillar?.[0]} dayBranch={chart.day_pillar?.[1]} showDetails={learningHintsVisible} /><Pillar label="月" value={chart.month_pillar} dayStem={chart.day_pillar?.[0]} dayBranch={chart.day_pillar?.[1]} showDetails={learningHintsVisible} /><Pillar label="日" value={chart.day_pillar} dayStem={chart.day_pillar?.[0]} dayBranch={chart.day_pillar?.[1]} showDetails={learningHintsVisible} active /><Pillar label="时" value={chart.hour_pillar} dayStem={chart.day_pillar?.[0]} dayBranch={chart.day_pillar?.[1]} showDetails={learningHintsVisible} /></div></div>{learningHintsVisible && foundations.dayMaster.stem && <details className="chart-foundations"><summary><span>基础口径与学习边界</span><small>日主 · 藏干 · 纳音 · 明透十神</small><CaretDown size={15} /></summary><div className="chart-foundation-grid"><article><small>日主</small><strong>{foundations.dayMaster.stem}</strong><span>{foundations.dayMaster.polarity}{foundations.dayMaster.element}</span></article><article><small>月支藏干</small><strong>{foundations.monthBranch.branch}</strong><span>{foundations.monthBranch.hiddenStems.join('、')}</span></article><article><small>日支藏干</small><strong>{foundations.dayBranch.branch}</strong><span>{foundations.dayBranch.hiddenStems.join('、')}</span></article><article><small>日柱纳音</small><strong>{foundations.dayNayin}</strong><span>{chart.day_pillar}</span></article></div><div className="visible-ten-gods"><small>明透天干相对日主</small><div>{foundations.visibleTenGods.map((item) => <span key={item.position}><b>{item.position}{item.stem}</b><em>{item.tenGod}</em></span>)}</div></div><footer>神煞采用常见的日干、日支起法，仅供定位；不同传承表法可能有差异。十神、纳音和神煞均不能单独推出旺衰、喜忌或事件结论。</footer></details>}{relationHintsVisible && relations.length > 0 && <details className="chart-relations"><summary><span>展开干支关系提示</span><small>{relations.length} 项基础关系</small><CaretDown size={15} /></summary><div>{relations.map((relation) => <article key={relation.id}><header><Badge variant="soft" color={relation.scope === '天干' ? 'orange' : 'gray'}>{relation.scope}</Badge><strong>{relation.type}</strong></header><p><b>{relation.members}</b>{relation.result && <span>{relation.result}</span>}</p><small>{relation.locations.join('、')}</small></article>)}</div><footer>这里只识别表内结构，不直接判断吉凶；同一对地支可能在不同关系表中重复出现。</footer></details>}</div>
   })}</div>{!charts.length && <p className="muted">本例未识别出完整四柱。</p>}</section>
 }
 
-function Pillar({ label, value, active = false }: { label: string; value: string; active?: boolean }) {
-  return <div className={active ? 'active' : ''}><span>{label}柱</span><strong>{value}</strong></div>
+function Pillar({ label, value, dayStem = '', dayBranch = '', showDetails = false, active = false }: { label: string; value: string; dayStem?: string; dayBranch?: string; showDetails?: boolean; active?: boolean }) {
+  const stem = value?.[0] || ''
+  const branch = value?.[1] || ''
+  const hidden = hiddenStemsFor(branch)
+  const shensha = majorShenshaFor(dayStem, dayBranch, branch)
+  return <div className={active ? 'active' : ''}><span className="pillar-label">{label}柱</span><strong className="pillar-glyphs">{value || '未识别'}</strong>{showDetails && value?.length === 2 && <dl className="pillar-facts"><div><dt>十神</dt><dd>{active ? '日主' : tenGodFor(dayStem, stem) || '未识别'}</dd></div><div><dt>藏干</dt><dd>{hidden.join('、') || '无'}</dd></div><div><dt>纳音</dt><dd>{nayinFor(value) || '未识别'}</dd></div><div><dt>神煞</dt><dd title={shensha.map((item) => `${item.name}（${item.basis}）`).join('、')}>{shensha.map((item) => item.name).join('、') || '无'}</dd></div></dl>}</div>
 }
 
 function PageIntro({ eyebrow, title, body }: { eyebrow: string; title: string; body: string }) {
