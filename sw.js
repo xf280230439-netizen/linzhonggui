@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'linzhonggui-shell-'
-const CACHE_NAME = `${CACHE_PREFIX}bdd2a1225c`
+const CACHE_NAME = `${CACHE_PREFIX}029c10a9be`
 const PRECACHE = ["./","./assets/sqlite3-BVKGSWc-.wasm","./assets/sqlite3-opfs-async-proxy-D_xnb1D8.js","./assets/sqlite3-worker1-DfZCUurM.js","./index.html","./manifest.webmanifest"]
 
 self.addEventListener('install', (event) => {
