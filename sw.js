@@ -1,4 +1,4 @@
-const CACHE_NAME = 'linzhonggui-shell-ba53992ad1'
+const CACHE_NAME = 'linzhonggui-shell-e8b78c63a0'
 const PRECACHE = ["./","./assets/sqlite3-BVKGSWc-.wasm","./assets/sqlite3-opfs-async-proxy-D_xnb1D8.js","./assets/sqlite3-worker1-DfZCUurM.js","./index.html","./manifest.webmanifest"]
 
 self.addEventListener('install', (event) => {
