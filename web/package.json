@@ -1,0 +1,31 @@
+{
+  "name": "linzhonggui",
+  "private": true,
+  "version": "2.10.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build && node scripts/finalize-service-worker.mjs",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist",
+    "preview": "vite preview",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "latest",
+    "@radix-ui/themes": "latest",
+    "@sqlite.org/sqlite-wasm": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "gh-pages": "6.3.0",
+    "playwright-core": "^1.61.1",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}
