@@ -14,20 +14,20 @@
     "verify": "npm run build && npm run smoke"
   },
   "dependencies": {
-    "@phosphor-icons/react": "latest",
-    "@radix-ui/themes": "latest",
-    "@sqlite.org/sqlite-wasm": "latest",
-    "react": "latest",
-    "react-dom": "latest"
+    "@phosphor-icons/react": "2.1.10",
+    "@radix-ui/themes": "3.3.0",
+    "@sqlite.org/sqlite-wasm": "3.53.0-build1",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
   },
   "devDependencies": {
-    "@types/node": "^26.0.1",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "@vitejs/plugin-react": "latest",
+    "@types/node": "26.0.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
     "gh-pages": "6.3.0",
-    "playwright-core": "^1.61.1",
-    "typescript": "latest",
-    "vite": "latest"
+    "playwright-core": "1.61.1",
+    "typescript": "6.0.3",
+    "vite": "8.1.0"
   }
 }
