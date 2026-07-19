@@ -65,6 +65,17 @@ try {
   await page.locator('.chart-board').waitFor()
   assert(await page.locator('.chart-foundations,.chart-relations').count() === 0, '深度训练不应事前显示提示。')
 
+  const caseReview = { id: 'case:Z002', kind: 'case', caseUid: 'Z002', body: 'review note', completed: true, updatedAt: new Date().toISOString() }
+  await putRecord(page, { ...caseReview, nextReviewAt: '2026-01-01T00:00:00.000Z' })
+  await page.reload()
+  await page.locator('.app-shell').waitFor()
+  await page.goto(base)
+  await page.locator('.hero-panel button').first().click()
+  await page.locator('.chart-board').waitFor()
+  assert(new URL(page.url()).hash.startsWith('#/practice/Z002/review-'), '到期复习应进入独立练习而不是直接看原文。')
+  assert(await page.locator('.chart-foundations,.chart-relations').count() === 0, '到期复习在揭示前不应显示提示。')
+  await putRecord(page, { ...caseReview, nextReviewAt: '2099-01-01T00:00:00.000Z' })
+
   const recordBase = { id: 'quiz:Z001', kind: 'quiz', caseUid: 'Z001', completed: true, updatedAt: new Date().toISOString() }
   await putRecord(page, {
     ...recordBase,
@@ -87,6 +98,13 @@ try {
     quizTotal: 5,
   })
   await page.reload()
+  await page.locator('.app-shell').waitFor()
+  await page.goto(base)
+  await page.locator('.hero-panel').waitFor()
+  await page.locator('.hero-panel button').first().click()
+  await page.locator('.quiz-question').first().waitFor()
+  assert(new URL(page.url()).hash === '#/quiz/Z001/wrong', '今日学习应在新案例前优先处理错题。')
+  await page.goto(`${base}#/training/quiz`)
   await page.locator('.quiz-diagnostics').waitFor()
   await page.locator('.quiz-scope-tabs button').nth(2).click()
   await page.locator('.list-row').first().click()
@@ -101,7 +119,7 @@ try {
   assert(errors.length === 0, `浏览器错误：${errors.join(' | ')}`)
 
   console.log('PASS  database auto-load')
-  console.log('PASS  normal chart hints and masked-training boundary')
+  console.log('PASS  normal chart hints, masked training, and due-review boundary')
   console.log('PASS  legacy 4/5 progress migration')
   console.log('PASS  direct mistake-only retry')
   console.log('PASS  390px mobile layout and browser console')

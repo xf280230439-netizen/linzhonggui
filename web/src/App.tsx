@@ -494,15 +494,16 @@ function HomeView({ db, records }: { db: LocalStudyDatabase; records: LocalRecor
   const reviewEvaluation = [...evaluations.entries()]
     .filter(([, evaluation]) => evaluation.complete && evaluation.wrong.length)
     .sort(([, first], [, second]) => second.wrong.length - first.wrong.length)[0]
-  const nextCase = nextIncomplete || quizCases.find((item) => item.case_uid === reviewEvaluation?.[0])
-  const reviewing = !nextIncomplete && Boolean(nextCase)
+  const reviewCase = quizCases.find((item) => item.case_uid === reviewEvaluation?.[0])
+  const nextCase = reviewCase || nextIncomplete
+  const reviewing = Boolean(reviewCase)
   const dueRecords = dueCaseRecords(records)
   const dueCase = dueRecords[0] ? db.query<{ case_uid: string; printed_label: string; title: string }>('SELECT case_uid, printed_label, title FROM cases WHERE case_uid=?', [dueRecords[0].caseUid])[0] : undefined
   return (
     <div className="page-stack">
       <section className="hero-panel">
         <div><p className="eyebrow">{dueCase ? '今天先复习' : '今天学一点就够'}</p><h1>{dueCase ? '有一例到了复盘时间。' : nextCase ? reviewing ? '回看一组没有全对的题。' : '先做一组案例选择题。' : '全部可练案例已经完成。'}</h1><p>{dueCase ? `${dueCase.printed_label} · ${dueCase.title}；${dueRecords.length > 1 ? `另有 ${dueRecords.length - 1} 例等待复习。` : '今天只需复盘这一例。'}` : nextCase ? `${nextCase.printed_label} · ${nextCase.title}` : '可以检索案例原文，或进入规则证据区复盘。'}</p></div>
-        <div className="button-row">{dueCase ? <Button size="3" onClick={() => go('case', dueCase.case_uid)}><CalendarCheck size={19} />开始到期复习</Button> : <Button size="3" onClick={() => nextCase ? go('quiz', nextCase.case_uid) : go('training')}><Brain size={19} />{nextCase ? reviewing ? '复习这一组' : '继续选择题' : '查看学习记录'}</Button>}{dueCase && nextCase && <Button className="hero-secondary" size="3" variant="soft" color="gray" onClick={() => go('quiz', nextCase.case_uid)}>继续选择题</Button>}</div>
+        <div className="button-row">{dueCase ? <Button size="3" onClick={() => go('practice', dueCase.case_uid, `review-${Date.now().toString(36)}`)}><CalendarCheck size={19} />开始到期复习</Button> : <Button size="3" onClick={() => nextCase ? go('quiz', nextCase.case_uid, reviewing ? 'wrong' : undefined) : go('training')}><Brain size={19} />{nextCase ? reviewing ? '只重做错题' : '继续选择题' : '查看学习记录'}</Button>}{dueCase && nextCase && <Button className="hero-secondary" size="3" variant="soft" color="gray" onClick={() => go('quiz', nextCase.case_uid, reviewing ? 'wrong' : undefined)}>{reviewing ? '重做选择题错项' : '继续选择题'}</Button>}</div>
       </section>
       <section className="stat-strip" aria-label="资料库概览">
         <Stat value={meta.case_sections || '131'} label="现有案例" />
