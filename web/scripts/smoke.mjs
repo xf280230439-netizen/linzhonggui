@@ -170,6 +170,18 @@ try {
     assert(await page.locator('.empty-state').count() === 0, `${hash} 不应进入未找到状态。`)
   }
 
+  await page.reload()
+  await page.locator('.app-shell').waitFor()
+  const cachedLocalUrls = await page.evaluate(async () => {
+    const urls = []
+    for (const cacheName of await caches.keys()) {
+      const cache = await caches.open(cacheName)
+      urls.push(...(await cache.keys()).map((request) => request.url).filter((url) => url.includes('/__local/')))
+    }
+    return urls
+  })
+  assert(cachedLocalUrls.length === 0, `Service Worker 不应缓存本地数据库或书籍：${cachedLocalUrls.join(', ')}`)
+
   await page.setViewportSize({ width: 390, height: 844 })
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   assert(overflow === 0, `移动端横向溢出 ${overflow}px。`)
@@ -181,6 +193,7 @@ try {
   console.log('PASS  direct mistake-only retry')
   console.log('PASS  backup export, legacy import, and malformed-record rejection')
   console.log('PASS  all primary, learning, practice, and rule routes')
+  console.log('PASS  service worker keeps local data out of Cache Storage')
   console.log('PASS  390px mobile layout and browser console')
 } finally {
   if (browser) await browser.close()
