@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 
@@ -113,6 +114,62 @@ try {
   assert(await page.locator('.quiz-question').count() === 5, '五个错项应只显示五道错题。')
   assert(await page.locator('.chart-foundations,.chart-relations').count() === 0, '错题重做不应显示答案提示。')
 
+  await page.goto(base)
+  await page.locator('.app-shell').waitFor()
+  await page.locator('button[aria-label="打开设置"]').click()
+  const settings = page.locator('[role="dialog"]')
+  await settings.waitFor()
+  const backupInput = settings.locator('input[accept*="json"]')
+  await backupInput.setInputFiles({
+    name: 'legacy-backup.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      format: 'zhou-study-notes',
+      records: [{ id: 'practice:backup-smoke', kind: 'practice', caseUid: 'Z003', body: 'smoke', completed: false, updatedAt: new Date().toISOString() }],
+    })),
+  })
+  await page.waitForFunction(() => document.querySelector('.inline-message')?.textContent?.includes('已导入 1 条'))
+  const downloadPromise = page.waitForEvent('download')
+  await settings.getByRole('button', { name: '导出备份' }).click()
+  const download = await downloadPromise
+  assert(download.suggestedFilename().startsWith('linzhonggui-学习记录-'), '备份文件名应使用 linzhonggui。')
+  const downloadPath = await download.path()
+  assert(downloadPath, '备份下载应生成本地文件。')
+  const exported = JSON.parse(await readFile(downloadPath, 'utf8'))
+  assert(exported.format === 'linzhonggui-notes', '新备份应使用 linzhonggui 格式标识。')
+  assert(exported.records.some((record) => record.id === 'practice:backup-smoke'), '导入记录应能再次完整导出。')
+  await backupInput.setInputFiles({
+    name: 'broken-backup.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ format: 'linzhonggui-notes', records: [{ id: 'broken', caseUid: 'Z003', body: 'smoke', updatedAt: new Date().toISOString() }] })),
+  })
+  await page.waitForFunction(() => document.querySelector('.inline-message')?.textContent?.includes('kind 无效'))
+  await settings.getByRole('button', { name: '完成' }).click()
+
+  const routeChecks = [
+    ['#/home', '.hero-panel'],
+    ['#/training/quiz', '.quiz-catalog'],
+    ['#/training/foundations', '.foundation-stack'],
+    ['#/training/workflows/marriage', '.workflow-reference'],
+    ['#/training/advanced', '.advanced-training'],
+    ['#/cases', '.search-page'],
+    ['#/library', '.library-page'],
+    ['#/rules', '.family-section'],
+    ['#/rule/R001', '.rule-hero'],
+    ['#/case/Z001', '.case-hero'],
+    ['#/quiz/Z001', '.quiz-page'],
+    ['#/training-card/Z001', '.detail-page'],
+    ['#/practice/Z001/smoke-route', '.blind-banner'],
+    ['#/blind/R001/Z007', '.blind-banner'],
+  ]
+  for (const [hash, selector] of routeChecks) {
+    await page.goto(`${base}${hash}`)
+    const content = page.locator(selector)
+    await content.first().waitFor()
+    assert((await content.first().innerText()).trim().length > 10, `${hash} 应渲染有效内容。`)
+    assert(await page.locator('.empty-state').count() === 0, `${hash} 不应进入未找到状态。`)
+  }
+
   await page.setViewportSize({ width: 390, height: 844 })
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   assert(overflow === 0, `移动端横向溢出 ${overflow}px。`)
@@ -122,6 +179,8 @@ try {
   console.log('PASS  normal chart hints, masked training, and due-review boundary')
   console.log('PASS  legacy 4/5 progress migration')
   console.log('PASS  direct mistake-only retry')
+  console.log('PASS  backup export, legacy import, and malformed-record rejection')
+  console.log('PASS  all primary, learning, practice, and rule routes')
   console.log('PASS  390px mobile layout and browser console')
 } finally {
   if (browser) await browser.close()

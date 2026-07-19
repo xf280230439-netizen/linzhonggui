@@ -34,6 +34,7 @@ import { LocalStudyDatabase } from './sqlite'
 import { BRANCH_RELATION_GROUPS, HIDDEN_STEMS, NAYIN, RELATION_QUIZ_QUESTIONS, STEM_BASICS, STEM_RELATION_GROUPS, detectChartRelations, summarizeChartFoundations, tenGodFor, type RelationGroup } from './foundations'
 import { buildCaseQuiz } from './quiz'
 import { QUIZ_SKILLS, evaluateQuizCases, parseQuizAnswers, quizMistakeLabels, quizSkillFor } from './quiz-progress'
+import { parseRecordsBackup, serializeRecordsBackup } from './backup'
 import { BOOK_GROUPS, REFERENCE_BOOKS, matchLocalBook, type BookGroup } from './library'
 import { TOPIC_WORKFLOWS } from './workflows'
 import { DAY_STEMS, EMPTY_FILTERS, parseSmartQuery, searchCases, type SmartFilters } from './search'
@@ -395,11 +396,11 @@ function pageTitle(route: Route) {
 function SettingsDialog(props: ShellProps) {
   const [message, setMessage] = useState('')
   async function exportNotes() {
-    const payload = JSON.stringify({ format: 'zhou-study-notes', exportedAt: new Date().toISOString(), records: props.records }, null, 2)
+    const payload = serializeRecordsBackup(props.records)
     const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }))
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = `周氏案研笔记-${new Date().toISOString().slice(0, 10)}.json`
+    anchor.download = `linzhonggui-学习记录-${new Date().toISOString().slice(0, 10)}.json`
     anchor.click()
     URL.revokeObjectURL(url)
   }
@@ -407,10 +408,9 @@ function SettingsDialog(props: ShellProps) {
     const file = event.target.files?.[0]
     if (!file) return
     try {
-      const parsed = JSON.parse(await file.text()) as { format?: string; records?: LocalRecord[] }
-      if (parsed.format !== 'zhou-study-notes' || !Array.isArray(parsed.records)) throw new Error('不是有效的周氏案研笔记备份。')
-      await props.onImportRecords(parsed.records)
-      setMessage(`已导入 ${parsed.records.length} 条本地记录。`)
+      const records = parseRecordsBackup(await file.text())
+      await props.onImportRecords(records)
+      setMessage(`已导入 ${records.length} 条本地记录。`)
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : '导入失败。')
     } finally {
@@ -433,7 +433,7 @@ function SettingsDialog(props: ShellProps) {
         </div>
         <div className="settings-section">
           <h3>个人笔记</h3>
-          <p>当前共 {props.records.length} 条。导出的 JSON 可用于迁移到手机或另一台电脑。</p>
+          <p>当前共 {props.records.length} 条。导出的 JSON 可用于迁移到手机或另一台电脑；导入时同 ID 记录会覆盖，其余记录保留。</p>
           <div className="button-row">
             <Button variant="soft" onClick={exportNotes}><FileArrowDown size={17} />导出备份</Button>
             <label className="secondary-file-button"><input type="file" accept="application/json,.json" onChange={importNotes} /><UploadSimple size={17} />导入备份</label>
