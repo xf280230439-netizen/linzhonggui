@@ -20,7 +20,7 @@ export type BookEntry = {
 }
 
 export const BOOK_GROUPS: Array<{ id: BookGroup; description: string }> = [
-  { id: '陆致极体系', description: '按独立作品去重收录 15 部；纸书、电子书、简繁版和再版不重复计数。' },
+  { id: '陆致极体系', description: '整理 15 项已核验书目；包含独著、合著，以及为说明源流而保留的早期本、增订本与新版合集。' },
   { id: '古籍与校注', description: '用于追溯概念和比较不同论法，不作为选择题答案来源。' },
   { id: '近现代参考', description: '观察近代作者如何整理古法、组织案例和转换语言。' },
 ]
