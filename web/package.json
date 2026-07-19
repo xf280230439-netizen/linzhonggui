@@ -9,7 +9,9 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist",
     "preview": "vite preview",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "smoke": "node scripts/smoke.mjs",
+    "verify": "npm run build && npm run smoke"
   },
   "dependencies": {
     "@phosphor-icons/react": "latest",

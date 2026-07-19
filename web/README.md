@@ -69,10 +69,13 @@ cd "项目根目录"
 npm install --prefix web
 npm run typecheck
 npm run build
+cd web
+npm run verify
+cd ..
 py build\validate.py
 ```
 
-构建产物位于 `web/dist/`，不包含本地案例原始资料和参考书文件。
+`npm run verify` 会构建正式页面、启动临时本地预览，并自动检查数据库载入、旧题进度兼容、盲练提示边界、错题重做和 390 像素手机布局。构建产物位于 `web/dist/`，不包含本地案例原始资料和参考书文件。
 
 ## 发布 GitHub Pages
 
