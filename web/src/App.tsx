@@ -33,6 +33,7 @@ import { Badge, Button, Dialog, IconButton, TextArea, TextField, Theme } from '@
 import { LocalStudyDatabase } from './sqlite'
 import { BRANCH_RELATION_GROUPS, HIDDEN_STEMS, NAYIN, RELATION_QUIZ_QUESTIONS, STEM_BASICS, STEM_RELATION_GROUPS, detectChartRelations, tenGodFor, type RelationGroup } from './foundations'
 import { buildCaseQuiz } from './quiz'
+import { QUIZ_SKILLS, evaluateQuizCases, parseQuizAnswers, quizMistakeLabels, quizSkillFor } from './quiz-progress'
 import { BOOK_GROUPS, REFERENCE_BOOKS, matchLocalBook, type BookGroup } from './library'
 import { TOPIC_WORKFLOWS } from './workflows'
 import { DAY_STEMS, EMPTY_FILTERS, parseSmartQuery, searchCases, type SmartFilters } from './search'
@@ -487,17 +488,21 @@ function HomeView({ db, records }: { db: LocalStudyDatabase; records: LocalRecor
   const quizCases = availableQuizCases(db)
   const starterIds = db.query<{ case_uid: string }>('SELECT case_uid FROM training_cards ORDER BY sequence').map((item) => item.case_uid).filter((id) => quizCases.some((item) => item.case_uid === id))
   const orderedCases = [...starterIds.map((id) => quizCases.find((item) => item.case_uid === id)).filter(Boolean) as QuizCaseItem[], ...quizCases.filter((item) => !starterIds.includes(item.case_uid))]
-  const quizRecords = records.filter((item) => item.kind === 'quiz' && item.completed)
-  const completedQuizzes = quizCases.filter((item) => quizRecords.some((record) => record.caseUid === item.case_uid)).length
-  const nextIncomplete = orderedCases.find((item) => !quizRecords.some((record) => record.caseUid === item.case_uid))
-  const reviewRecord = quizRecords.filter((item) => (item.quizScore || 0) < (item.quizTotal || 4)).sort((a, b) => (a.quizScore || 0) - (b.quizScore || 0))[0]
-  const nextCase = nextIncomplete || quizCases.find((item) => item.case_uid === reviewRecord?.caseUid)
+  const evaluations = evaluateQuizCases(db, quizCases, records)
+  const completedQuizzes = quizCases.filter((item) => evaluations.get(item.case_uid)?.complete).length
+  const nextIncomplete = orderedCases.find((item) => !evaluations.get(item.case_uid)?.complete)
+  const reviewEvaluation = [...evaluations.entries()]
+    .filter(([, evaluation]) => evaluation.complete && evaluation.wrong.length)
+    .sort(([, first], [, second]) => second.wrong.length - first.wrong.length)[0]
+  const nextCase = nextIncomplete || quizCases.find((item) => item.case_uid === reviewEvaluation?.[0])
   const reviewing = !nextIncomplete && Boolean(nextCase)
+  const dueRecords = dueCaseRecords(records)
+  const dueCase = dueRecords[0] ? db.query<{ case_uid: string; printed_label: string; title: string }>('SELECT case_uid, printed_label, title FROM cases WHERE case_uid=?', [dueRecords[0].caseUid])[0] : undefined
   return (
     <div className="page-stack">
       <section className="hero-panel">
-        <div><p className="eyebrow">今天学一点就够</p><h1>{nextCase ? reviewing ? '回看一组没有全对的题。' : '先做一组案例选择题。' : '全部可练案例已经完成。'}</h1><p>{nextCase ? `${nextCase.printed_label} · ${nextCase.title}` : '可以检索案例原文，或进入规则证据区复盘。'}</p></div>
-        <Button size="3" onClick={() => nextCase ? go('quiz', nextCase.case_uid) : go('training')}><Brain size={19} />{nextCase ? reviewing ? '复习这一组' : '继续选择题' : '查看学习记录'}</Button>
+        <div><p className="eyebrow">{dueCase ? '今天先复习' : '今天学一点就够'}</p><h1>{dueCase ? '有一例到了复盘时间。' : nextCase ? reviewing ? '回看一组没有全对的题。' : '先做一组案例选择题。' : '全部可练案例已经完成。'}</h1><p>{dueCase ? `${dueCase.printed_label} · ${dueCase.title}；${dueRecords.length > 1 ? `另有 ${dueRecords.length - 1} 例等待复习。` : '今天只需复盘这一例。'}` : nextCase ? `${nextCase.printed_label} · ${nextCase.title}` : '可以检索案例原文，或进入规则证据区复盘。'}</p></div>
+        <div className="button-row">{dueCase ? <Button size="3" onClick={() => go('case', dueCase.case_uid)}><CalendarCheck size={19} />开始到期复习</Button> : <Button size="3" onClick={() => nextCase ? go('quiz', nextCase.case_uid) : go('training')}><Brain size={19} />{nextCase ? reviewing ? '复习这一组' : '继续选择题' : '查看学习记录'}</Button>}{dueCase && nextCase && <Button className="hero-secondary" size="3" variant="soft" color="gray" onClick={() => go('quiz', nextCase.case_uid)}>继续选择题</Button>}</div>
       </section>
       <section className="stat-strip" aria-label="资料库概览">
         <Stat value={meta.case_sections || '131'} label="现有案例" />
@@ -539,7 +544,7 @@ function TrainingView({ db, records, route }: { db: LocalStudyDatabase; records:
     <PageIntro eyebrow="个人学习" title="从会认盘开始，不急着断命。" body="先完成十四例入门题，再按专题学习步骤、盲练和复盘。例117缺少完整命盘，只保留在深度训练中。" />
     <nav className="learning-mode-tabs" aria-label="学习模式"><button className={mode === 'quiz' ? 'active' : ''} onClick={() => selectMode('quiz')}><CheckCircle size={18} />案例选择题</button><button className={mode === 'foundations' ? 'active' : ''} onClick={() => selectMode('foundations')}><Table size={18} />基础表</button><button className={mode === 'workflows' ? 'active' : ''} onClick={() => selectMode('workflows')}><ListChecks size={18} />专题步骤</button><button className={mode === 'advanced' ? 'active' : ''} onClick={() => selectMode('advanced')}><Brain size={18} />深度训练</button></nav>
     {mode === 'quiz' && <QuizCatalog db={db} records={records} />}
-    {mode === 'foundations' && <FoundationReference db={db} />}
+    {mode === 'foundations' && <FoundationReference db={db} focus={route.secondaryId} />}
     {mode === 'workflows' && <WorkflowReference db={db} records={records} selectedId={workflowId} onSelect={(id) => { localStorage.setItem('zhou-workflow-id', id); go('training', 'workflows', id) }} />}
     {mode === 'advanced' && <AdvancedTrainingList db={db} records={records} />}
   </div>
@@ -553,20 +558,31 @@ function QuizCatalog({ db, records }: { db: LocalStudyDatabase; records: LocalRe
   const starterIds = db.query<{ case_uid: string }>('SELECT case_uid FROM training_cards ORDER BY sequence').map((item) => item.case_uid).filter((id) => cases.some((item) => item.case_uid === id))
   const methodCaseCount = cases.filter((item) => splitTags(item.methods).length).length
   const starterOrder = new Map(starterIds.map((id, index) => [id, index]))
-  const results = new Map(records.filter((record) => record.kind === 'quiz' && record.completed).map((record) => [record.caseUid, record]))
-  const completed = cases.filter((item) => results.has(item.case_uid)).length
+  const evaluations = evaluateQuizCases(db, cases, records)
+  const completed = cases.filter((item) => evaluations.get(item.case_uid)?.complete).length
   const mastered = cases.filter((item) => {
-    const result = results.get(item.case_uid)
-    return result && result.quizScore === result.quizTotal
+    const evaluation = evaluations.get(item.case_uid)
+    return evaluation?.complete && evaluation.score === evaluation.total
   }).length
   const reviewCount = cases.filter((item) => {
-    const result = results.get(item.case_uid)
-    return result && (result.quizScore || 0) < (result.quizTotal || 4)
+    const evaluation = evaluations.get(item.case_uid)
+    return evaluation?.complete && evaluation.wrong.length > 0
   }).length
+  const skillStats = QUIZ_SKILLS.map((skill) => ({ ...skill, attempts: 0, mistakes: 0 }))
+  const skillIndex = new Map<string, (typeof skillStats)[number]>(skillStats.map((skill) => [skill.questionId, skill]))
+  for (const evaluation of evaluations.values()) {
+    if (!evaluation.complete) continue
+    for (const question of evaluation.questions) {
+      const stat = skillIndex.get(question.id)
+      if (!stat) continue
+      stat.attempts += 1
+      if (evaluation.answers[question.id] !== question.answer) stat.mistakes += 1
+    }
+  }
   let scopedCases = scope === 'starter' ? cases.filter((item) => starterOrder.has(item.case_uid)).sort((a, b) => (starterOrder.get(a.case_uid) || 0) - (starterOrder.get(b.case_uid) || 0)) : scope === 'review' ? cases.filter((item) => {
-    const result = results.get(item.case_uid)
-    return result && (result.quizScore || 0) < (result.quizTotal || 4)
-  }).sort((a, b) => (results.get(a.case_uid)?.quizScore || 0) - (results.get(b.case_uid)?.quizScore || 0)) : cases
+    const evaluation = evaluations.get(item.case_uid)
+    return evaluation?.complete && evaluation.wrong.length > 0
+  }).sort((a, b) => (evaluations.get(b.case_uid)?.wrong.length || 0) - (evaluations.get(a.case_uid)?.wrong.length || 0)) : cases
   const normalizedQuery = query.trim().toLowerCase()
   if (normalizedQuery) scopedCases = scopedCases.filter((item) => `${item.printed_label} ${item.title} ${item.methods}`.toLowerCase().includes(normalizedQuery))
   const visibleCases = scopedCases.slice(0, visibleCount)
@@ -574,11 +590,18 @@ function QuizCatalog({ db, records }: { db: LocalStudyDatabase; records: LocalRe
 
   return <section className="module-section quiz-catalog"><div className="module-heading"><div><GraduationCap size={24} /><div><h2>案例选择题库</h2><p>每例 4–5 题；命盘存在无歧义的干支关系时增加 1 题。{methodCaseCount} 例含方法标签，其余案例改问命盘月柱。</p></div></div><Badge color={completed === cases.length ? 'green' : 'gray'}>{completed}/{cases.length}</Badge></div>
     <div className="quiz-progress-strip"><div><strong>{starterIds.length}</strong><span>入门案例</span></div><div><strong>{completed}</strong><span>已完成</span></div><div><strong>{mastered}</strong><span>全部答对</span></div><div><strong>{reviewCount}</strong><span>需要复习</span></div></div>
+    {completed > 0 && <section className="quiz-diagnostics"><header><div><small>个人错项诊断</small><strong>错在哪里，比总分更重要</strong></div><p>按当前版本题目重新统计；点击基础项目可直接回到对应速查表。</p></header><div className="quiz-diagnostic-grid">{skillStats.filter((stat) => stat.attempts > 0).map((stat) => {
+      const content = <><span>{stat.label}</span><strong>{stat.mistakes}</strong><small>错误／{stat.attempts} 次</small></>
+      return 'foundationFocus' in stat ? <button className={stat.mistakes ? 'has-mistakes' : 'clear'} key={stat.questionId} onClick={() => go('training', 'foundations', stat.foundationFocus)}>{content}</button> : <div className={stat.mistakes ? 'has-mistakes' : 'clear'} key={stat.questionId}>{content}</div>
+    })}</div></section>}
     <div className="quiz-catalog-controls"><div className="quiz-scope-tabs"><button className={scope === 'starter' ? 'active' : ''} onClick={() => setScope('starter')}>入门 {starterIds.length} 例</button><button className={scope === 'all' ? 'active' : ''} onClick={() => setScope('all')}>全部 {cases.length} 例</button><button className={scope === 'review' ? 'active' : ''} onClick={() => setScope('review')}>待复习 {reviewCount}</button></div><label className="quiz-search"><MagnifyingGlass size={16} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索例号、标题或方法" /></label></div>
     {visibleCases.length ? <><div className="list-panel">{visibleCases.map((item, index) => {
-      const result = results.get(item.case_uid)
+      const evaluation = evaluations.get(item.case_uid)
       const displayIndex = scope === 'starter' ? (starterOrder.get(item.case_uid) || 0) + 1 : cases.indexOf(item) + 1
-      return <button className="list-row" key={item.case_uid} onClick={() => go('quiz', item.case_uid)}><span className={`row-index ${result?.completed ? 'complete' : ''}`}>{result?.completed ? <CheckCircle weight="fill" /> : String(displayIndex || index + 1).padStart(2, '0')}</span><span className="row-main"><strong>{item.printed_label} · {item.title}</strong><small>{result?.completed ? `上次得分 ${result.quizScore}/${result.quizTotal}` : '4–5 道基础选择题'}</small></span><Badge variant="soft" color={result?.completed && result.quizScore === result.quizTotal ? 'green' : 'gray'}>{result?.completed ? '可重做' : '未完成'}</Badge><span className="row-arrow">›</span></button>
+      const mistakeLabels = quizMistakeLabels(evaluation)
+      const detail = evaluation?.complete ? mistakeLabels.length ? `得分 ${evaluation.score}/${evaluation.total} · 错项：${mistakeLabels.join('、')}` : `得分 ${evaluation.score}/${evaluation.total} · 全部答对` : evaluation?.answered ? `待完成 ${evaluation.answered}/${evaluation.total}，继续上次进度` : '4–5 道基础选择题'
+      const badge = evaluation?.complete ? '可重做' : evaluation?.answered ? `待补 ${evaluation.total - evaluation.answered} 题` : '未完成'
+      return <button className="list-row" key={item.case_uid} onClick={() => go('quiz', item.case_uid)}><span className={`row-index ${evaluation?.complete ? 'complete' : ''}`}>{evaluation?.complete ? <CheckCircle weight="fill" /> : String(displayIndex || index + 1).padStart(2, '0')}</span><span className="row-main"><strong>{item.printed_label} · {item.title}</strong><small>{detail}</small></span><Badge variant="soft" color={evaluation?.complete && !mistakeLabels.length ? 'green' : 'gray'}>{badge}</Badge><span className="row-arrow">›</span></button>
     })}</div>{visibleCount < scopedCases.length && <div className="load-more"><Button variant="soft" color="gray" onClick={() => setVisibleCount((count) => count + 30)}>再显示 {Math.min(30, scopedCases.length - visibleCount)} 例</Button></div>}</> : <div className="quiz-empty"><CheckCircle size={27} /><h3>{scope === 'review' ? '目前没有待复习题组' : '没有匹配的案例'}</h3><p>{scope === 'review' ? '答错的题组会自动出现在这里。' : '换一个关键词试试。'}</p></div>}
   </section>
 }
@@ -620,18 +643,23 @@ function FoundationRelationQuiz() {
   })}</div>{selected && <div className={`relation-explanation ${selected === question.answer ? 'correct' : 'wrong'}`}><strong>{selected === question.answer ? '答对了' : `正确答案：${question.answer}`}</strong><p>{question.explanation}</p><Button size="1" onClick={next}>{questionIndex + 1 === RELATION_QUIZ_QUESTIONS.length ? '查看结果' : '下一题'}<ArrowRight size={14} /></Button></div>}</div></section>
 }
 
-function FoundationReference({ db }: { db: LocalStudyDatabase }) {
+function FoundationReference({ db, focus }: { db: LocalStudyDatabase; focus?: string }) {
   const [dayStem, setDayStem] = useState('甲')
   const charts = db.query<Chart>('SELECT * FROM charts ORDER BY case_uid, chart_index')
   const pillars = charts.flatMap((chart) => [chart.year_pillar, chart.month_pillar, chart.day_pillar, chart.hour_pillar])
   const branchCount = (branch: string) => pillars.filter((pillar) => pillar.endsWith(branch)).length
   const nayinCount = (first: string, second: string) => pillars.filter((pillar) => pillar === first || pillar === second).length
   const elements = ['金', '木', '水', '火', '土']
-  return <div className="foundation-stack"><section className="foundation-section stem-foundation"><div><h2>十天干与十神速查</h2><p>先认阴阳五行，再选择日主查看其余天干对应的十神。十神关系随日主改变。</p></div><div className="stem-basic-grid">{STEM_BASICS.map((item) => <article key={item.stem}><strong>{item.stem}</strong><span>{item.polarity}{item.element}</span></article>)}</div><div className="ten-god-reference"><header><div><small>当前日主</small><h3>{dayStem}日主</h3></div><div>{STEM_BASICS.map((item) => <button className={dayStem === item.stem ? 'active' : ''} key={item.stem} onClick={() => setDayStem(item.stem)}>{item.stem}</button>)}</div></header><div className="ten-god-grid">{STEM_BASICS.map((item) => <article key={item.stem}><span><strong>{item.stem}</strong><small>{item.polarity}{item.element}</small></span><b>{tenGodFor(dayStem, item.stem)}</b></article>)}</div></div></section>
-    <section className="foundation-section relation-foundation"><div><h2>天干、地支关系速查</h2><p>先识别组合，再回到命局判断作用。天干以五合、生克为基础；刑、害（穿）、破等属于地支关系。</p></div><div className="relation-scope-grid"><RelationScope label="十天干" title="五合与相克" groups={STEM_RELATION_GROUPS} /><RelationScope label="十二地支" title="合、会、冲、刑、害、破" groups={BRANCH_RELATION_GROUPS} /></div><aside className="relation-boundary"><strong>学习边界</strong><p>关系名称只回答“盘里出现了什么结构”，不直接回答吉凶。合不必然吉，冲刑害破也不必然凶；还要看月令、位置、旺衰、透藏与案例反馈。</p></aside></section>
+  useEffect(() => {
+    if (!focus || !['stems', 'relations', 'hidden', 'nayin'].includes(focus)) return
+    const frame = window.requestAnimationFrame(() => document.getElementById(`foundation-${focus}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    return () => window.cancelAnimationFrame(frame)
+  }, [focus])
+  return <div className="foundation-stack"><section className="foundation-section stem-foundation" id="foundation-stems"><div><h2>十天干与十神速查</h2><p>先认阴阳五行，再选择日主查看其余天干对应的十神。十神关系随日主改变。</p></div><div className="stem-basic-grid">{STEM_BASICS.map((item) => <article key={item.stem}><strong>{item.stem}</strong><span>{item.polarity}{item.element}</span></article>)}</div><div className="ten-god-reference"><header><div><small>当前日主</small><h3>{dayStem}日主</h3></div><div>{STEM_BASICS.map((item) => <button className={dayStem === item.stem ? 'active' : ''} key={item.stem} onClick={() => setDayStem(item.stem)}>{item.stem}</button>)}</div></header><div className="ten-god-grid">{STEM_BASICS.map((item) => <article key={item.stem}><span><strong>{item.stem}</strong><small>{item.polarity}{item.element}</small></span><b>{tenGodFor(dayStem, item.stem)}</b></article>)}</div></div></section>
+    <section className="foundation-section relation-foundation" id="foundation-relations"><div><h2>天干、地支关系速查</h2><p>先识别组合，再回到命局判断作用。天干以五合、生克为基础；刑、害（穿）、破等属于地支关系。</p></div><div className="relation-scope-grid"><RelationScope label="十天干" title="五合与相克" groups={STEM_RELATION_GROUPS} /><RelationScope label="十二地支" title="合、会、冲、刑、害、破" groups={BRANCH_RELATION_GROUPS} /></div><aside className="relation-boundary"><strong>学习边界</strong><p>关系名称只回答“盘里出现了什么结构”，不直接回答吉凶。合不必然吉，冲刑害破也不必然凶；还要看月令、位置、旺衰、透藏与案例反馈。</p></aside></section>
     <FoundationRelationQuiz />
-    <section className="foundation-section"><div><h2>十二地支藏干</h2><p>顺序按常用藏干表记录。右侧数字表示该地支在现有命盘四柱中出现的次数。</p></div><div className="hidden-stem-grid">{HIDDEN_STEMS.map((item) => <article key={item.branch}><header><strong>{item.branch}</strong><small>出现 {branchCount(item.branch)} 次</small></header><div>{item.stems.map((stem, index) => <span key={stem}><small>{index === 0 ? '本气' : index === 1 ? '中气' : '余气'}</small><strong>{stem}</strong></span>)}</div></article>)}</div></section>
-    <section className="foundation-section"><div><h2>六十甲子纳音</h2><p>两个干支共用一个纳音名称。先认日柱，不把纳音直接扩展成案例结论。</p></div><div className="nayin-groups">{elements.map((element) => <section key={element}><h3>{element}</h3><div>{NAYIN.filter((item) => item.name.endsWith(element)).map((item) => <article key={item.name}><span>{item.pillars.join('、')}</span><strong>{item.name}</strong><small>库内 {nayinCount(...item.pillars)} 次</small></article>)}</div></section>)}</div></section></div>
+    <section className="foundation-section" id="foundation-hidden"><div><h2>十二地支藏干</h2><p>顺序按常用藏干表记录。右侧数字表示该地支在现有命盘四柱中出现的次数。</p></div><div className="hidden-stem-grid">{HIDDEN_STEMS.map((item) => <article key={item.branch}><header><strong>{item.branch}</strong><small>出现 {branchCount(item.branch)} 次</small></header><div>{item.stems.map((stem, index) => <span key={stem}><small>{index === 0 ? '本气' : index === 1 ? '中气' : '余气'}</small><strong>{stem}</strong></span>)}</div></article>)}</div></section>
+    <section className="foundation-section" id="foundation-nayin"><div><h2>六十甲子纳音</h2><p>两个干支共用一个纳音名称。先认日柱，不把纳音直接扩展成案例结论。</p></div><div className="nayin-groups">{elements.map((element) => <section key={element}><h3>{element}</h3><div>{NAYIN.filter((item) => item.name.endsWith(element)).map((item) => <article key={item.name}><span>{item.pillars.join('、')}</span><strong>{item.name}</strong><small>库内 {nayinCount(...item.pillars)} 次</small></article>)}</div></section>)}</div></section></div>
 }
 
 function WorkflowReference({ db, records, selectedId, onSelect }: { db: LocalStudyDatabase; records: LocalRecord[]; selectedId: string; onSelect: (id: string) => void }) {
@@ -698,20 +726,21 @@ function QuizView({ db, caseUid, records, onSave }: { db: LocalStudyDatabase; ca
   const methods = splitTags(caseData?.methods || '')
   const methodPool = db.query<{ tag: string }>("SELECT tag FROM tags WHERE kind='method' GROUP BY tag ORDER BY COUNT(*) DESC").map((item) => item.tag)
   const existing = records.find((record) => record.id === recordId('quiz', caseUid))
-  const [answers, setAnswers] = useState<Record<string, string>>(() => {
-    try { return existing?.body ? JSON.parse(existing.body) : {} } catch { return {} }
-  })
+  const [answers, setAnswers] = useState<Record<string, string>>(() => parseQuizAnswers(existing?.body))
   if (!caseData || !chart) return <NotFound />
   const questions = buildCaseQuiz(caseUid, chart, methods, methodPool)
   const answered = Object.keys(answers).filter((id) => questions.some((question) => question.id === id)).length
   const score = questions.filter((question) => answers[question.id] === question.answer).length
   const complete = answered === questions.length
+  const wrongQuestions = questions.filter((question) => answers[question.id] && answers[question.id] !== question.answer)
+  const wrongLabels = [...new Set(wrongQuestions.map((question) => quizSkillFor(question.id).label))]
+  const foundationSkill = wrongQuestions.map((question) => quizSkillFor(question.id)).find((skill) => 'foundationFocus' in skill)
 
   async function choose(questionId: string, option: string) {
     if (answers[questionId]) return
     const nextAnswers = { ...answers, [questionId]: option }
     setAnswers(nextAnswers)
-    if (Object.keys(nextAnswers).length === questions.length) {
+    if (questions.filter((question) => Boolean(nextAnswers[question.id])).length === questions.length) {
       const nextScore = questions.filter((question) => nextAnswers[question.id] === question.answer).length
       await onSave({ id: recordId('quiz', caseUid), kind: 'quiz', caseUid, body: JSON.stringify(nextAnswers), completed: true, quizScore: nextScore, quizTotal: questions.length, updatedAt: new Date().toISOString() })
     }
@@ -725,7 +754,7 @@ function QuizView({ db, caseUid, records, onSave }: { db: LocalStudyDatabase; ca
         return <button className={state} key={option} disabled={Boolean(selected)} onClick={() => choose(question.id, option)}><span>{option}</span>{state === 'correct' && <Check size={18} weight="bold" />}{state === 'wrong' && <X size={18} weight="bold" />}</button>
       })}</div>{selected && <p className={`quiz-explanation ${selected === question.answer ? 'correct' : 'wrong'}`}>{selected === question.answer ? '答对了。' : `正确答案：${question.answer}。`}{question.explanation}</p>}</section>
     })}</div>
-    {complete && <section className="quiz-complete"><CheckCircle size={28} weight="fill" /><div><h2>本组完成：{score}/{questions.length}</h2><p>这些题只检查基础事实。下一步可以阅读原文，观察作者如何使用这些信息。</p></div><div className="button-row"><Button onClick={() => go('case', caseUid)}>阅读案例原文</Button><Button variant="soft" color="gray" onClick={() => setAnswers({})}>重新作答</Button><Button variant="ghost" color="gray" onClick={() => go('training')}>返回题目列表</Button></div></section>}
+    {complete && <section className="quiz-complete"><CheckCircle size={28} weight="fill" /><div><h2>本组完成：{score}/{questions.length}</h2><p>{wrongLabels.length ? `本次需回看：${wrongLabels.join('、')}。先补基础，再阅读原文观察作者如何使用这些信息。` : '基础事实已全部答对。下一步阅读原文，观察作者如何把这些信息接入判断。'}</p></div><div className="button-row">{foundationSkill && 'foundationFocus' in foundationSkill && <Button onClick={() => go('training', 'foundations', foundationSkill.foundationFocus)}><Table size={16} />回看{foundationSkill.label}</Button>}<Button variant={foundationSkill ? 'soft' : 'solid'} color={foundationSkill ? 'gray' : undefined} onClick={() => go('case', caseUid)}>阅读案例原文</Button><Button variant="soft" color="gray" onClick={() => setAnswers({})}>重新作答</Button><Button variant="ghost" color="gray" onClick={() => go('training')}>返回题目列表</Button></div></section>}
   </div>
 }
 
