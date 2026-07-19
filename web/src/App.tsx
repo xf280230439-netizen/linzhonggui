@@ -31,7 +31,7 @@ import {
 } from '@phosphor-icons/react'
 import { Badge, Button, Dialog, IconButton, TextArea, TextField, Theme } from '@radix-ui/themes'
 import { LocalStudyDatabase } from './sqlite'
-import { HIDDEN_STEMS, NAYIN, STEM_BASICS, tenGodFor } from './foundations'
+import { BRANCH_RELATION_GROUPS, HIDDEN_STEMS, NAYIN, RELATION_QUIZ_QUESTIONS, STEM_BASICS, STEM_RELATION_GROUPS, tenGodFor, type RelationGroup } from './foundations'
 import { buildCaseQuiz } from './quiz'
 import { BOOK_GROUPS, REFERENCE_BOOKS, matchLocalBook, type BookGroup } from './library'
 import { TOPIC_WORKFLOWS } from './workflows'
@@ -503,11 +503,11 @@ function HomeView({ db, records }: { db: LocalStudyDatabase; records: LocalRecor
         <Stat value={meta.case_sections || '131'} label="现有案例" />
         <Stat value={String(quizCases.length)} label={`可练案例 · 已完成 ${completedQuizzes}`} />
         <Stat value="12" label="地支藏干" />
-        <Stat value="10" label="十神关系" />
+        <Stat value="9" label="干支关系组" />
       </section>
       <section className="section-block learning-path">
-        <div><h2>推荐学习顺序</h2><p>先认天干、十神、藏干与纳音，再从十四例入门题进入专题步骤和盲练。</p></div>
-        <ol><li><span>基础</span><strong>天干、十神与藏干</strong></li><li><span>入门</span><strong>十四例选择题</strong></li><li><span>步骤</span><strong>专题步骤与盲练</strong></li><li><span>对照</span><strong>全部案例与原文</strong></li></ol>
+        <div><h2>推荐学习顺序</h2><p>先认天干、十神、藏干、纳音与干支关系，再从十四例入门题进入专题步骤和盲练。</p></div>
+        <ol><li><span>基础</span><strong>干支、十神与关系表</strong></li><li><span>入门</span><strong>十四例选择题</strong></li><li><span>步骤</span><strong>专题步骤与盲练</strong></li><li><span>对照</span><strong>全部案例与原文</strong></li></ol>
         <div className="button-row"><Button onClick={() => go('training')}>进入学习</Button><Button variant="soft" color="gray" onClick={() => go('library')}>打开参考书架</Button></div>
       </section>
       <section className="advanced-entry">
@@ -583,6 +583,43 @@ function QuizCatalog({ db, records }: { db: LocalStudyDatabase; records: LocalRe
   </section>
 }
 
+function RelationScope({ label, title, groups }: { label: string; title: string; groups: RelationGroup[] }) {
+  return <section className="relation-scope"><header><small>{label}</small><h3>{title}</h3></header><div className="relation-group-list">{groups.map((group) => <article className="relation-card" key={group.id}><div><h4>{group.title}</h4><p>{group.description}</p></div><div className="relation-pairs">{group.entries.map((entry) => <span key={`${group.id}-${entry.members}`}><b>{entry.members}</b>{entry.result && <small>{entry.result}</small>}</span>)}</div><footer>{group.boundary}</footer></article>)}</div></section>
+}
+
+function FoundationRelationQuiz() {
+  const [questionIndex, setQuestionIndex] = useState(0)
+  const [selected, setSelected] = useState('')
+  const [score, setScore] = useState(0)
+  const complete = questionIndex >= RELATION_QUIZ_QUESTIONS.length
+  const question = RELATION_QUIZ_QUESTIONS[questionIndex]
+
+  function choose(option: string) {
+    if (selected || !question) return
+    setSelected(option)
+    if (option === question.answer) setScore((current) => current + 1)
+  }
+
+  function next() {
+    setSelected('')
+    setQuestionIndex((current) => current + 1)
+  }
+
+  function restart() {
+    setQuestionIndex(0)
+    setSelected('')
+    setScore(0)
+  }
+
+  if (complete) return <section className="foundation-section relation-quiz-section"><div><h2>关系选择题</h2><p>只练配对识别和判断边界，不用背事件断语。</p></div><div className="relation-quiz-complete"><CheckCircle size={34} weight="fill" /><small>本轮完成</small><strong>{score} / {RELATION_QUIZ_QUESTIONS.length}</strong><p>{score === RELATION_QUIZ_QUESTIONS.length ? '基础配对已经全部答对，可以回到案例里找实际组合。' : '错题不需要硬背，回到上方关系卡核对后再做一轮。'}</p><Button onClick={restart}>重新练习</Button></div></section>
+
+  return <section className="foundation-section relation-quiz-section"><div className="relation-quiz-heading"><div><h2>关系选择题</h2><p>一次一题，答完马上解释；共 {RELATION_QUIZ_QUESTIONS.length} 题。</p></div><span>{String(questionIndex + 1).padStart(2, '0')} / {RELATION_QUIZ_QUESTIONS.length}</span></div><div className="relation-quiz"><header><Badge variant="soft" color="gray">{question.category}</Badge><h3>{question.prompt}</h3></header><div className="relation-options">{question.options.map((option) => {
+    const correct = Boolean(selected) && option === question.answer
+    const wrong = selected === option && option !== question.answer
+    return <button className={correct ? 'correct' : wrong ? 'wrong' : ''} disabled={Boolean(selected)} key={option} onClick={() => choose(option)}><span>{option}</span>{correct ? <Check size={18} weight="bold" /> : wrong ? <X size={18} weight="bold" /> : null}</button>
+  })}</div>{selected && <div className={`relation-explanation ${selected === question.answer ? 'correct' : 'wrong'}`}><strong>{selected === question.answer ? '答对了' : `正确答案：${question.answer}`}</strong><p>{question.explanation}</p><Button size="1" onClick={next}>{questionIndex + 1 === RELATION_QUIZ_QUESTIONS.length ? '查看结果' : '下一题'}<ArrowRight size={14} /></Button></div>}</div></section>
+}
+
 function FoundationReference({ db }: { db: LocalStudyDatabase }) {
   const [dayStem, setDayStem] = useState('甲')
   const charts = db.query<Chart>('SELECT * FROM charts ORDER BY case_uid, chart_index')
@@ -591,6 +628,8 @@ function FoundationReference({ db }: { db: LocalStudyDatabase }) {
   const nayinCount = (first: string, second: string) => pillars.filter((pillar) => pillar === first || pillar === second).length
   const elements = ['金', '木', '水', '火', '土']
   return <div className="foundation-stack"><section className="foundation-section stem-foundation"><div><h2>十天干与十神速查</h2><p>先认阴阳五行，再选择日主查看其余天干对应的十神。十神关系随日主改变。</p></div><div className="stem-basic-grid">{STEM_BASICS.map((item) => <article key={item.stem}><strong>{item.stem}</strong><span>{item.polarity}{item.element}</span></article>)}</div><div className="ten-god-reference"><header><div><small>当前日主</small><h3>{dayStem}日主</h3></div><div>{STEM_BASICS.map((item) => <button className={dayStem === item.stem ? 'active' : ''} key={item.stem} onClick={() => setDayStem(item.stem)}>{item.stem}</button>)}</div></header><div className="ten-god-grid">{STEM_BASICS.map((item) => <article key={item.stem}><span><strong>{item.stem}</strong><small>{item.polarity}{item.element}</small></span><b>{tenGodFor(dayStem, item.stem)}</b></article>)}</div></div></section>
+    <section className="foundation-section relation-foundation"><div><h2>天干、地支关系速查</h2><p>先识别组合，再回到命局判断作用。天干以五合、生克为基础；刑、害（穿）、破等属于地支关系。</p></div><div className="relation-scope-grid"><RelationScope label="十天干" title="五合与相克" groups={STEM_RELATION_GROUPS} /><RelationScope label="十二地支" title="合、会、冲、刑、害、破" groups={BRANCH_RELATION_GROUPS} /></div><aside className="relation-boundary"><strong>学习边界</strong><p>关系名称只回答“盘里出现了什么结构”，不直接回答吉凶。合不必然吉，冲刑害破也不必然凶；还要看月令、位置、旺衰、透藏与案例反馈。</p></aside></section>
+    <FoundationRelationQuiz />
     <section className="foundation-section"><div><h2>十二地支藏干</h2><p>顺序按常用藏干表记录。右侧数字表示该地支在现有命盘四柱中出现的次数。</p></div><div className="hidden-stem-grid">{HIDDEN_STEMS.map((item) => <article key={item.branch}><header><strong>{item.branch}</strong><small>出现 {branchCount(item.branch)} 次</small></header><div>{item.stems.map((stem, index) => <span key={stem}><small>{index === 0 ? '本气' : index === 1 ? '中气' : '余气'}</small><strong>{stem}</strong></span>)}</div></article>)}</div></section>
     <section className="foundation-section"><div><h2>六十甲子纳音</h2><p>两个干支共用一个纳音名称。先认日柱，不把纳音直接扩展成案例结论。</p></div><div className="nayin-groups">{elements.map((element) => <section key={element}><h3>{element}</h3><div>{NAYIN.filter((item) => item.name.endsWith(element)).map((item) => <article key={item.name}><span>{item.pillars.join('、')}</span><strong>{item.name}</strong><small>库内 {nayinCount(...item.pillars)} 次</small></article>)}</div></section>)}</div></section></div>
 }
@@ -743,7 +782,7 @@ function LibraryView() {
 
   return <div className="page-stack library-page"><section className="library-heading"><div><p className="eyebrow">参考书架</p><h1>从案例走向文本</h1><p>陆致极著作按独立作品完整收录，另保留古籍与近现代参照。书目用于查证和比较，不会自动改写案例结论。</p></div><div><strong>{REFERENCE_BOOKS.length}</strong><span>核验书目 · 陆致极 {luBooks.length} 部</span></div></section>
     {canLoadProjectDatabase() ? <section className="library-local-note"><FolderOpen size={22} /><div><strong>本地书籍目录</strong><code>E:\Claude code\bazi\library</code><p>{loading ? '正在检测文件。' : files.length ? '已检测到本地文件，点击“本机阅读”即可打开。支持按作者建立子目录。' : '暂未检测到电子书。把合法持有的文件放入此目录或子目录，再重新打开网站。'}</p></div></section> : <section className="library-local-note"><Books size={22} /><div><strong>当前是远程或手机访问</strong><p>出于隐私保护，本地书籍不会通过局域网或公开网页传输。</p></div></section>}
-    <section className="library-bibliography-note"><CheckCircle size={22} weight="fill" /><div><strong>“完整”按独立作品计算</strong><p>作者书目页的纸书、电子书、简繁版与再版合并后，共收录 15 部命理及出生时空研究著作；语言学著作不在本学习库范围内。</p></div></section>
+    <section className="library-bibliography-note"><CheckCircle size={22} weight="fill" /><div><strong>需购入实体书后阅读</strong><p>本站只整理书目、版本关系与学习顺序，不提供电子书正文；“完整”按 15 部独立作品计算，简繁版与再版不重复计数。</p></div></section>
     <section className="library-reading-path"><article><span>01</span><div><strong>先建立骨架</strong><p>基础表 + 入门 14 例 +《基础教程》。</p></div></article><article><span>02</span><div><strong>带着问题查书</strong><p>遇到格局、调候或动态问题，再查对应专题。</p></div></article><article><span>03</span><div><strong>比较而非混用</strong><p>古籍与注家只作对照，结论仍回到案例证据。</p></div></article></section>
     <div className="library-tools"><div className="library-tool-main"><div className="library-filter-tabs"><button className={groupFilter === 'all' ? 'active' : ''} onClick={() => setGroupFilter('all')}>全部 {REFERENCE_BOOKS.length}</button>{BOOK_GROUPS.map((group) => <button className={groupFilter === group.id ? 'active' : ''} key={group.id} onClick={() => setGroupFilter(group.id)}>{group.id} {REFERENCE_BOOKS.filter((book) => book.group === group.id).length}</button>)}</div><div className="library-sort"><span>排列</span><button className={sortMode === 'learning' ? 'active' : ''} onClick={() => setSortMode('learning')}>学习顺序</button><button className={sortMode === 'year' ? 'active' : ''} onClick={() => setSortMode('year')}>出版脉络</button></div></div><label className="quiz-search"><MagnifyingGlass size={16} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索书名、年份、作者或主题" /></label></div>
     {BOOK_GROUPS.map((group) => {

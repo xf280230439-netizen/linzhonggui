@@ -187,6 +187,45 @@ p { line-height: 1.7; color: var(--muted); }
 .ten-god-grid article > span strong { font-family: "STKaiti", "KaiTi", serif; font-size: 19px; font-weight: 500; }
 .ten-god-grid article small { color: var(--muted); font-size: 8px; }
 .ten-god-grid b { color: var(--accent-11); font-size: 11px; }
+.relation-scope-grid { display: grid; grid-template-columns: minmax(0, .78fr) minmax(0, 1.22fr); align-items: start; gap: 16px; }
+.relation-scope { overflow: hidden; background: var(--gray-2); border: 1px solid var(--line); border-radius: 12px; }
+.relation-scope > header { padding: 18px 19px 15px; border-bottom: 1px solid var(--line); }
+.relation-scope > header small { color: var(--accent-11); font-size: 9px; font-weight: 700; }
+.relation-scope > header h3 { margin: 4px 0 0; font-size: 18px; }
+.relation-group-list { display: grid; }
+.relation-card { padding: 18px 19px; border-bottom: 1px solid var(--line); }
+.relation-card:last-child { border-bottom: 0; }
+.relation-card h4 { margin-bottom: 4px; font-size: 14px; }
+.relation-card > div:first-child p { margin: 0; color: var(--muted); font-size: 10px; }
+.relation-pairs { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
+.relation-pairs > span { display: inline-flex; align-items: baseline; gap: 6px; min-height: 30px; padding: 6px 9px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 7px; }
+.relation-pairs b { font-family: "STKaiti", "KaiTi", serif; font-size: 15px; font-weight: 650; white-space: nowrap; }
+.relation-pairs small { color: var(--accent-11); font-size: 9px; white-space: nowrap; }
+.relation-card footer { margin-top: 13px; color: var(--muted); font-size: 9px; line-height: 1.65; }
+.relation-boundary { margin-top: 16px; padding: 15px 17px; color: var(--amber-12); background: var(--amber-3); border-radius: 9px; }
+.relation-boundary strong { font-size: 11px; }
+.relation-boundary p { margin: 4px 0 0; color: var(--amber-12); font-size: 10px; line-height: 1.7; }
+.relation-quiz-section > .relation-quiz-heading { display: flex; max-width: none; align-items: start; justify-content: space-between; gap: 18px; }
+.relation-quiz-heading > span { flex: 0 0 auto; padding-top: 5px; color: var(--muted); font-family: Georgia, serif; font-size: 11px; }
+.relation-quiz { max-width: 780px; }
+.relation-quiz > header { margin-bottom: 18px; }
+.relation-quiz h3 { max-width: 660px; margin: 13px 0 0; font-family: "STSong", "SimSun", serif; font-size: 21px; line-height: 1.55; }
+.relation-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.relation-options button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 10px 14px; color: var(--ink); background: var(--gray-2); border: 1px solid var(--line); border-radius: 9px; text-align: left; cursor: pointer; }
+.relation-options button:hover:not(:disabled) { border-color: var(--accent-8); background: var(--accent-2); }
+.relation-options button:disabled { cursor: default; }
+.relation-options button.correct { color: var(--green-12); background: var(--green-3); border-color: var(--green-7); }
+.relation-options button.wrong { color: var(--red-11); background: var(--red-3); border-color: var(--red-7); }
+.relation-explanation { display: grid; justify-items: start; gap: 7px; margin-top: 13px; padding: 15px 16px; border-radius: 9px; }
+.relation-explanation.correct { color: var(--green-12); background: var(--green-3); }
+.relation-explanation.wrong { color: var(--red-11); background: var(--red-3); }
+.relation-explanation strong { font-size: 12px; }
+.relation-explanation p { margin: 0; color: inherit; font-size: 10px; line-height: 1.7; }
+.relation-explanation .rt-Button { margin-top: 2px; }
+.relation-quiz-complete { display: grid; justify-items: center; padding: 28px 18px 14px; color: var(--green-11); text-align: center; }
+.relation-quiz-complete small { margin-top: 9px; color: var(--muted); font-size: 10px; }
+.relation-quiz-complete > strong { margin-top: 2px; color: var(--ink); font-family: Georgia, serif; font-size: 34px; font-weight: 500; }
+.relation-quiz-complete p { max-width: 520px; margin: 8px 0 17px; color: var(--muted); font-size: 11px; }
 .hidden-stem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .hidden-stem-grid article { padding: 16px; background: var(--gray-2); border: 1px solid var(--line); border-radius: 10px; }
 .hidden-stem-grid header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
@@ -499,6 +538,7 @@ p { line-height: 1.7; color: var(--muted); }
   .rule-card-grid { grid-template-columns: 1fr; }
   .nayin-groups { grid-template-columns: repeat(3, 1fr); }
   .stem-basic-grid { grid-template-columns: repeat(5, 1fr); }
+  .relation-scope-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 800px) {
@@ -599,6 +639,11 @@ p { line-height: 1.7; color: var(--muted); }
   .ten-god-reference > header { align-items: flex-start; flex-direction: column; }
   .ten-god-reference > header > div:last-child { justify-content: flex-start; }
   .ten-god-grid { grid-template-columns: repeat(2, 1fr); }
+  .relation-card { padding: 16px 14px; }
+  .relation-pairs { gap: 6px; }
+  .relation-pairs > span { padding: 5px 8px; }
+  .relation-options { grid-template-columns: 1fr; }
+  .relation-quiz h3 { font-size: 19px; }
   .hidden-stem-grid { grid-template-columns: 1fr; }
   .nayin-groups { grid-template-columns: 1fr 1fr; gap: 8px; }
   .nayin-groups > section { padding: 12px; }
