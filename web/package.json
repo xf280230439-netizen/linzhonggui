@@ -10,8 +10,9 @@
     "deploy": "gh-pages -d dist",
     "preview": "vite preview",
     "typecheck": "tsc -b",
+    "audit:foundations": "node --experimental-strip-types --no-warnings scripts/audit-foundations.mjs",
     "smoke": "node scripts/smoke.mjs",
-    "verify": "npm run build && npm run smoke"
+    "verify": "npm run build && npm run audit:foundations && npm run smoke"
   },
   "dependencies": {
     "@phosphor-icons/react": "2.1.10",
