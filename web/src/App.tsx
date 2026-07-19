@@ -31,7 +31,7 @@ import {
 } from '@phosphor-icons/react'
 import { Badge, Button, Dialog, IconButton, TextArea, TextField, Theme } from '@radix-ui/themes'
 import { LocalStudyDatabase } from './sqlite'
-import { BRANCH_RELATION_GROUPS, HIDDEN_STEMS, NAYIN, RELATION_QUIZ_QUESTIONS, STEM_BASICS, STEM_RELATION_GROUPS, detectChartRelations, tenGodFor, type RelationGroup } from './foundations'
+import { BRANCH_RELATION_GROUPS, HIDDEN_STEMS, NAYIN, RELATION_QUIZ_QUESTIONS, STEM_BASICS, STEM_RELATION_GROUPS, detectChartRelations, summarizeChartFoundations, tenGodFor, type RelationGroup } from './foundations'
 import { buildCaseQuiz } from './quiz'
 import { QUIZ_SKILLS, evaluateQuizCases, parseQuizAnswers, quizMistakeLabels, quizSkillFor } from './quiz-progress'
 import { BOOK_GROUPS, REFERENCE_BOOKS, matchLocalBook, type BookGroup } from './library'
@@ -746,7 +746,7 @@ function QuizView({ db, caseUid, records, onSave }: { db: LocalStudyDatabase; ca
     }
   }
 
-  return <div className="page-stack detail-page quiz-page"><BackButton to="training" label="返回个人学习" /><section className="quiz-heading"><div><p className="eyebrow">{caseData.printed_label} · 基础选择题</p><h1>{caseData.title}</h1><p>已答 {answered}/{questions.length}，当前答对 {score} 题。题目使用本案例第一张完整命盘。</p></div><Badge color={complete ? 'green' : 'gray'}>{complete ? `${score}/${questions.length}` : '作答中'}</Badge></section><ChartSection charts={[chart]} showRelations={complete} />
+  return <div className="page-stack detail-page quiz-page"><BackButton to="training" label="返回个人学习" /><section className="quiz-heading"><div><p className="eyebrow">{caseData.printed_label} · 基础选择题</p><h1>{caseData.title}</h1><p>已答 {answered}/{questions.length}，当前答对 {score} 题。题目使用本案例第一张完整命盘。</p></div><Badge color={complete ? 'green' : 'gray'}>{complete ? `${score}/${questions.length}` : '作答中'}</Badge></section><ChartSection charts={[chart]} showRelations={complete} showLearningHints={complete} />
     <div className="quiz-questions">{questions.map((question, index) => {
       const selected = answers[question.id]
       return <section className={`quiz-question ${selected ? 'answered' : ''}`} key={question.id}><header><span>{index + 1}</span><h2>{question.prompt}</h2></header><div className="quiz-options">{question.options.map((option) => {
@@ -1058,11 +1058,14 @@ function CaseView({ db, caseUid, records, onSave, source }: { db: LocalStudyData
   </div>
 }
 
-function ChartSection({ charts, masked = false, showRelations = true }: { charts: Chart[]; masked?: boolean; showRelations?: boolean }) {
+function ChartSection({ charts, masked = false, showRelations, showLearningHints }: { charts: Chart[]; masked?: boolean; showRelations?: boolean; showLearningHints?: boolean }) {
   const chartTypeLabel = (type: string) => type === 'natal_bazi' ? '本命八字' : type === 'event_time' ? '时空八字' : type === 'liuren_time' ? '六壬时间盘' : type
+  const relationHintsVisible = showRelations ?? !masked
+  const learningHintsVisible = showLearningHints ?? !masked
   return <section className="chart-section"><div className="section-heading"><div><p className="eyebrow">命盘</p><h2>{charts.length > 1 ? `${charts.length} 组四柱` : '四柱排布'}</h2></div>{masked && <Badge variant="soft" color="gray">其余资料已遮蔽</Badge>}</div><div className="chart-list">{charts.map((chart) => {
     const relations = detectChartRelations(chart)
-    return <div className="chart-with-relations" key={chart.chart_id}><div className="chart-board"><header><span>{chartTypeLabel(chart.chart_type)}</span>{chart.gender && <span>{chart.gender}</span>}</header><div className="pillars"><Pillar label="年" value={chart.year_pillar} /><Pillar label="月" value={chart.month_pillar} /><Pillar label="日" value={chart.day_pillar} active /><Pillar label="时" value={chart.hour_pillar} /></div></div>{showRelations && relations.length > 0 && <details className="chart-relations"><summary><span>展开干支关系提示</span><small>{relations.length} 项基础关系</small><CaretDown size={15} /></summary><div>{relations.map((relation) => <article key={relation.id}><header><Badge variant="soft" color={relation.scope === '天干' ? 'orange' : 'gray'}>{relation.scope}</Badge><strong>{relation.type}</strong></header><p><b>{relation.members}</b>{relation.result && <span>{relation.result}</span>}</p><small>{relation.locations.join('、')}</small></article>)}</div><footer>这里只识别表内结构，不直接判断吉凶；同一对地支可能在不同关系表中重复出现。</footer></details>}</div>
+    const foundations = summarizeChartFoundations(chart)
+    return <div className="chart-with-relations" key={chart.chart_id}><div className="chart-board"><header><span>{chartTypeLabel(chart.chart_type)}</span>{chart.gender && <span>{chart.gender}</span>}</header><div className="pillars"><Pillar label="年" value={chart.year_pillar} /><Pillar label="月" value={chart.month_pillar} /><Pillar label="日" value={chart.day_pillar} active /><Pillar label="时" value={chart.hour_pillar} /></div></div>{learningHintsVisible && foundations.dayMaster.stem && <details className="chart-foundations"><summary><span>展开基础拆解</span><small>日主 · 藏干 · 纳音 · 明透十神</small><CaretDown size={15} /></summary><div className="chart-foundation-grid"><article><small>日主</small><strong>{foundations.dayMaster.stem}</strong><span>{foundations.dayMaster.polarity}{foundations.dayMaster.element}</span></article><article><small>月支藏干</small><strong>{foundations.monthBranch.branch}</strong><span>{foundations.monthBranch.hiddenStems.join('、')}</span></article><article><small>日支藏干</small><strong>{foundations.dayBranch.branch}</strong><span>{foundations.dayBranch.hiddenStems.join('、')}</span></article><article><small>日柱纳音</small><strong>{foundations.dayNayin}</strong><span>{chart.day_pillar}</span></article></div><div className="visible-ten-gods"><small>明透天干相对日主</small><div>{foundations.visibleTenGods.map((item) => <span key={item.position}><b>{item.position}{item.stem}</b><em>{item.tenGod}</em></span>)}</div></div><footer>这里只拆解可直接核对的基础事实；十神名称不等于旺衰、喜忌或事件结论。</footer></details>}{relationHintsVisible && relations.length > 0 && <details className="chart-relations"><summary><span>展开干支关系提示</span><small>{relations.length} 项基础关系</small><CaretDown size={15} /></summary><div>{relations.map((relation) => <article key={relation.id}><header><Badge variant="soft" color={relation.scope === '天干' ? 'orange' : 'gray'}>{relation.scope}</Badge><strong>{relation.type}</strong></header><p><b>{relation.members}</b>{relation.result && <span>{relation.result}</span>}</p><small>{relation.locations.join('、')}</small></article>)}</div><footer>这里只识别表内结构，不直接判断吉凶；同一对地支可能在不同关系表中重复出现。</footer></details>}</div>
   })}</div>{!charts.length && <p className="muted">本例未识别出完整四柱。</p>}</section>
 }
 

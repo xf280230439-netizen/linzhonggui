@@ -344,13 +344,24 @@ p { line-height: 1.7; color: var(--muted); }
 .pillars strong { font-family: "STKaiti", "KaiTi", serif; font-size: clamp(24px, 4vw, 35px); font-weight: 500; letter-spacing: .08em; }
 .pillars .active { background: var(--accent-2); }
 .pillars .active strong { color: var(--accent-11); }
-.chart-relations { margin-top: 8px; overflow: hidden; background: var(--gray-2); border: 1px solid var(--line); border-radius: 10px; }
-.chart-relations summary { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 9px; min-height: 42px; padding: 8px 13px; color: var(--ink); cursor: pointer; list-style: none; }
-.chart-relations summary::-webkit-details-marker { display: none; }
-.chart-relations summary > span { font-size: 11px; font-weight: 650; }
-.chart-relations summary > small { color: var(--muted); font-size: 9px; }
-.chart-relations summary > svg { color: var(--muted); transition: transform .16s ease; }
-.chart-relations[open] summary > svg { transform: rotate(180deg); }
+.chart-relations, .chart-foundations { margin-top: 8px; overflow: hidden; background: var(--gray-2); border: 1px solid var(--line); border-radius: 10px; }
+.chart-relations summary, .chart-foundations summary { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 9px; min-height: 42px; padding: 8px 13px; color: var(--ink); cursor: pointer; list-style: none; }
+.chart-relations summary::-webkit-details-marker, .chart-foundations summary::-webkit-details-marker { display: none; }
+.chart-relations summary > span, .chart-foundations summary > span { font-size: 11px; font-weight: 650; }
+.chart-relations summary > small, .chart-foundations summary > small { color: var(--muted); font-size: 9px; }
+.chart-relations summary > svg, .chart-foundations summary > svg { color: var(--muted); transition: transform .16s ease; }
+.chart-relations[open] summary > svg, .chart-foundations[open] summary > svg { transform: rotate(180deg); }
+.chart-foundation-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; padding: 0 11px 8px; }
+.chart-foundation-grid article { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 4px 8px; min-width: 0; padding: 11px 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
+.chart-foundation-grid article small { grid-column: 1 / -1; color: var(--muted); font-size: 8px; }
+.chart-foundation-grid article strong { color: var(--accent-11); font-family: "STKaiti", "KaiTi", serif; font-size: 19px; font-weight: 650; }
+.chart-foundation-grid article span { overflow: hidden; color: var(--ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.visible-ten-gods { display: grid; grid-template-columns: 130px minmax(0, 1fr); align-items: center; gap: 10px; padding: 0 12px 10px; }
+.visible-ten-gods > small { color: var(--muted); font-size: 9px; }
+.visible-ten-gods > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.visible-ten-gods span { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; font-size: 9px; }
+.visible-ten-gods b { font-weight: 650; }
+.visible-ten-gods em { color: var(--accent-11); font-style: normal; }
 .chart-relations > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding: 0 11px 11px; }
 .chart-relations article { min-width: 0; padding: 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
 .chart-relations article header { display: flex; align-items: center; justify-content: flex-start; gap: 7px; padding: 0; color: var(--ink); border: 0; }
@@ -359,7 +370,7 @@ p { line-height: 1.7; color: var(--muted); }
 .chart-relations article p b { font-family: "STKaiti", "KaiTi", serif; font-size: 18px; font-weight: 650; }
 .chart-relations article p span { color: var(--accent-11); font-size: 9px; }
 .chart-relations article > small { color: var(--muted); font-size: 9px; }
-.chart-relations > footer { padding: 9px 12px; color: var(--muted); background: var(--gray-3); font-size: 9px; line-height: 1.6; }
+.chart-relations > footer, .chart-foundations > footer { padding: 9px 12px; color: var(--muted); background: var(--gray-3); font-size: 9px; line-height: 1.6; }
 .prompt-list { display: grid; gap: 11px; margin: 18px 0 22px; padding: 0; list-style: none; }
 .prompt-list li { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: flex-start; gap: 10px; }
 .prompt-list li > span { display: grid; place-items: center; width: 22px; height: 22px; color: var(--muted); background: var(--gray-3); border-radius: 50%; font-size: 10px; }
@@ -704,7 +715,9 @@ p { line-height: 1.7; color: var(--muted); }
   .quiz-question { padding: 21px 16px; }
   .quiz-options { grid-template-columns: 1fr; }
   .chart-relations > div { grid-template-columns: 1fr; }
-  .chart-relations summary > small { display: none; }
+  .chart-relations summary > small, .chart-foundations summary > small { display: none; }
+  .chart-foundation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .visible-ten-gods { grid-template-columns: 1fr; gap: 6px; }
   .quiz-complete { grid-template-columns: auto 1fr; padding: 21px 17px; }
   .quiz-complete .button-row { grid-column: 1 / -1; }
   .library-heading { grid-template-columns: 1fr; }

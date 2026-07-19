@@ -257,6 +257,14 @@ export type ChartPillars = {
   hour_pillar: string
 }
 
+export type ChartFoundationSummary = {
+  dayMaster: { stem: string; polarity: string; element: string }
+  monthBranch: { branch: string; hiddenStems: string[] }
+  dayBranch: { branch: string; hiddenStems: string[] }
+  dayNayin: string
+  visibleTenGods: Array<{ position: string; stem: string; tenGod: string }>
+}
+
 export type DetectedRelation = {
   id: string
   scope: '天干' | '地支'
@@ -435,4 +443,23 @@ export function tenGodFor(dayStem: string, otherStem: string) {
   if (otherIndex === (dayIndex + 2) % 5) return samePolarity ? '偏财' : '正财'
   if (otherIndex === (dayIndex + 3) % 5) return samePolarity ? '七杀' : '正官'
   return samePolarity ? '偏印' : '正印'
+}
+
+export function summarizeChartFoundations(chart: ChartPillars): ChartFoundationSummary {
+  const dayStem = chart.day_pillar?.[0] || ''
+  const dayBranch = chart.day_pillar?.[1] || ''
+  const monthBranch = chart.month_pillar?.[1] || ''
+  const dayBasic = STEM_BASICS.find((item) => item.stem === dayStem)
+  const visibleTenGods = [
+    ['年干', chart.year_pillar?.[0] || ''],
+    ['月干', chart.month_pillar?.[0] || ''],
+    ['时干', chart.hour_pillar?.[0] || ''],
+  ].map(([position, stem]) => ({ position, stem, tenGod: tenGodFor(dayStem, stem) })).filter((item) => item.stem && item.tenGod)
+  return {
+    dayMaster: { stem: dayStem, polarity: dayBasic?.polarity || '', element: dayBasic?.element || '' },
+    monthBranch: { branch: monthBranch, hiddenStems: hiddenStemsFor(monthBranch) },
+    dayBranch: { branch: dayBranch, hiddenStems: hiddenStemsFor(dayBranch) },
+    dayNayin: nayinFor(chart.day_pillar),
+    visibleTenGods,
+  }
 }
